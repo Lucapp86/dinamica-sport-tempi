@@ -170,7 +170,7 @@ function Normalize-EventName([string]$RawEventTitle) {
     $clean = [regex]::Replace($clean, '(?i)^Gara\s*\d+\s*[\u2014\u2013\-:]\s*', '').Trim()
     $clean = [regex]::Replace($clean, '\s+', ' ')
     # Normalizza "50m" o "50 Stile" -> "50 m Stile" (preservando eventuali staffette "4x50")
-    $clean = [regex]::Replace($clean, '(?<![xX\d])(\d+)\s*(?:m\b\s*)?', '$1 m ')
+    $clean = [regex]::Replace($clean, '(?<![xX\d])(\d+)(?!\s*[xX\d])\s*(?:m\b\s*)?', '$1 m ')
     $clean = [regex]::Replace($clean, '\s+', ' ').Trim()
     # Capitalizzazione pulita dello stile
     $clean = [regex]::Replace($clean, '(?i)\bstile\s+libero\b', 'Stile libero')
@@ -180,6 +180,51 @@ function Normalize-EventName([string]$RawEventTitle) {
     $clean = [regex]::Replace($clean, '(?i)\bmisti\b', 'Misti')
     $clean = [regex]::Replace($clean, '(?i)\bmista\b', 'Mista')
     return $clean
+}
+
+function Normalize-RelayEventName([string]$RawEventTitle, [string]$Gender = "") {
+    $ev = Normalize-EventName $RawEventTitle
+    $isMixed = ($Gender -eq "Mista") -or ($ev -match '(?i)mistaffetta')
+    $body = ([regex]::Replace($ev, '(?i)\b(?:mi)?staffetta\b', '')).Trim()
+    $body = ([regex]::Replace($body, '\s+', ' ')).Trim()
+    if ($body -notmatch '4\s*[xX]\s*\d+') {
+        if ($body -match '^100\s*m\s+(.+)$') { $body = "4x25 m $($Matches[1])" }
+        elseif ($body -match '^200\s*m\s+(.+)$') { $body = "4x50 m $($Matches[1])" }
+        elseif ($body -match '^400\s*m\s+(.+)$') { $body = "4x100 m $($Matches[1])" }
+    }
+    $body = [regex]::Replace($body, '(\d+)\s*[xX]\s*(\d+)\s*(?:m\b\s*)?', '$1x$2 m ')
+    $body = ([regex]::Replace($body, '\s+', ' ')).Trim()
+    $prefix = if ($isMixed) { "Mistaffetta" } else { "Staffetta" }
+    return "$prefix $body".Trim()
+}
+
+function Parse-RelayFormation([string]$RawText, [string]$ClubRegex = "dinamica\s+sport") {
+    $t = [regex]::Replace($RawText, '\s+', ' ').Trim()
+    $t = [regex]::Replace($t, "(?i)^(?:$ClubRegex)(?:\s+s\.?s\.?d\.?(?:\s+a\s+r\.?l\.?)?)?\s*[\u2014\u2013\-:]?\s*", "").Trim()
+    # Rimuovi eventuale suffisso categoria finale aggiunto dal portale UISP (es. "Esordienti A/M", "Ragazzi", "Assoluti")
+    $t = [regex]::Replace($t, '(?i)\s+(?:Esordienti\s*[ABC]|Ragazzi|Juniores|Cadetti|Seniores|Assoluti|Master)(?:/[FM]|_[FM])?$', '').Trim()
+
+    $swimmers = New-Object System.Collections.Generic.List[string]
+    if ($t -match '\b1\.\s*') {
+        $legs = [regex]::Matches($t, '\b\d\.\s*([^/\d]+?)(?=\s*/\s*\d\.|$)')
+        foreach ($lg in $legs) {
+            $nm = Format-TitleCase ($lg.Groups[1].Value.Trim())
+            if ($nm) { [void]$swimmers.Add($nm) }
+        }
+    } elseif ($t -match '\s-\s') {
+        foreach ($part in ($t -split '\s+-\s+')) {
+            $pClean = $part.Trim()
+            if ($pClean -and $pClean -notmatch '^(?:[A-Z]|Squadra\s+[A-Z])$') {
+                [void]$swimmers.Add((Format-TitleCase $pClean))
+            }
+        }
+    }
+
+    $label = if ([string]::IsNullOrWhiteSpace($t)) { "Dinamica Sport" } elseif ($t -match '^[A-Z]$') { "Squadra $t" } else { $t }
+    return [pscustomobject]@{
+        teamLabel = $label
+        swimmers = [object[]]$swimmers.ToArray()
+    }
 }
 
 function Detect-PoolLength([string]$Text, [string]$DefaultPool = "25m") {
@@ -388,21 +433,26 @@ function Parse-SlmPage([string]$Html, [string]$SourceType, [string]$ClubRegex, [
                 # Verifica se e una staffetta (es. "Dinamica Sport s.s.d. a r.l. - A 1. ...")
                 $isRelay = ($athleteRaw -match $ClubRegex) -or ($athleteRaw -match '\b1\.\s+.*\b2\.\s+') -or ($eventName -match '(?i)4x\d+|staffetta')
                 if ($isRelay) {
+                    $relayEvent = Normalize-RelayEventName $rawEvent $catInfo.gender
+                    $formation = Parse-RelayFormation $athleteRaw $ClubRegex
                     [void]$relays.Add([pscustomobject]@{
                         meetId = $meetId
                         meet = $meetTitle
                         date = $meetDate
                         city = $meetCity
                         pool = $meetPool
-                        event = $eventName
+                        event = $relayEvent
                         category = $catInfo.category
                         gender = $catInfo.gender
-                        teamLabel = $athleteRaw
+                        teamLabel = $formation.teamLabel
+                        swimmers = $formation.swimmers
                         time = $parsedTime.formatted
                         timeCs = $parsedTime.timeCs
                         status = $parsedTime.status
                         position = $pos
+                        notes = $notes
                         sourceType = $SourceType
+                        isLive = $isLive
                     })
                     continue
                 }
@@ -460,15 +510,23 @@ function Parse-ManualCsv([string]$CsvText, [string]$DefaultPool, [string]$Defaul
         $pool = if ($props["vasca"]) { Detect-PoolLength $props["vasca"] $DefaultPool } else { $DefaultPool }
         $birthYear = if ($props["anno"] -match '^\d{4}$') { [int]$props["anno"] } else { $null }
 
+        $rawEvent = [string]$props["gara"]
+        $isRelay = ($name -match '(?i)^(?:Staffetta|Mistaffetta|Dinamica)') -or ($rawEvent -match '(?i)staffetta|mistaffetta|4\s*x\s*\d+')
+        $eventName = if ($isRelay) { Normalize-RelayEventName $rawEvent $catInfo.gender } else { Normalize-EventName $rawEvent }
+        $formation = if ($isRelay) { Parse-RelayFormation $name } else { $null }
+
         [void]$records.Add([pscustomobject]@{
             meetId = "manual"
             meet = if ($props["manifestazione"]) { $props["manifestazione"] } else { "Inserimento manuale" }
             date = Parse-ItalianDateToIso ($props["data"])
             city = $props["luogo"]
             pool = $pool
-            event = Normalize-EventName ($props["gara"])
+            event = $eventName
             category = $catInfo.category
             gender = $catInfo.gender
+            isRelay = $isRelay
+            teamLabel = if ($formation) { $formation.teamLabel } else { "" }
+            swimmers = if ($formation) { $formation.swimmers } else { @() }
             athleteRaw = $name
             athleteName = Format-TitleCase $name
             birthYear = $birthYear
@@ -487,12 +545,22 @@ function Parse-ManualCsv([string]$CsvText, [string]$DefaultPool, [string]$Defaul
     return $records.ToArray()
 }
 
-function Build-Dataset([object[]]$OfficialResults, [object[]]$ManualResults, [object[]]$StartlistEntries, [object[]]$Relays, [object]$Config) {
+function Build-Dataset([object[]]$OfficialResults, [object[]]$ManualResults, [object[]]$StartlistEntries, [object[]]$Relays, [object]$Config, [object[]]$StartlistRelays = @()) {
     $allResults = New-Object System.Collections.Generic.List[object]
     $seenResultKeys = New-Object System.Collections.Generic.HashSet[string]
+    $allOfficialRelays = New-Object System.Collections.Generic.List[object]
+
+    foreach ($rel in @($Relays)) {
+        if ($null -ne $rel) { [void]$allOfficialRelays.Add($rel) }
+    }
 
     foreach ($item in (@($OfficialResults) + @($ManualResults))) {
         if ($null -eq $item) { continue }
+        $hasIsRelay = ($null -ne $item.PSObject.Properties["isRelay"]) -and [bool]$item.isRelay
+        if ($hasIsRelay) {
+            [void]$allOfficialRelays.Add($item)
+            continue
+        }
         $idKey = "{0}|{1}|{2}|{3}|{4}|{5}" -f (Normalize-Key $item.athleteRaw), $item.date, (Normalize-Key $item.meet), (Normalize-Key $item.event), $item.pool, $item.time
         if ($seenResultKeys.Add($idKey)) {
             [void]$allResults.Add($item)
@@ -603,9 +671,61 @@ function Build-Dataset([object[]]$OfficialResults, [object[]]$ManualResults, [ob
         [void]$athletesOut.Add([pscustomobject]$a)
     }
 
+    # Costruisce lookup nome atleta -> id per collegare i frazionisti delle staffette
+    $athleteIdByNormName = @{}
+    foreach ($ao in $athletesOut) {
+        $nk = (Normalize-Key $ao.name) -replace '\s+', ''
+        if (-not $athleteIdByNormName.ContainsKey($nk)) {
+            $athleteIdByNormName[$nk] = $ao.id
+        }
+    }
+
+    $normalizeRelayList = {
+        param([object[]]$SourceList, [bool]$IsStartlist)
+        $out = New-Object System.Collections.Generic.List[object]
+        $seen = New-Object System.Collections.Generic.HashSet[string]
+        foreach ($rel in @($SourceList)) {
+            if ($null -eq $rel) { continue }
+            $lbl = if ($null -ne $rel.PSObject.Properties["teamLabel"] -and $rel.teamLabel) { [string]$rel.teamLabel } else { "Dinamica Sport" }
+            $rk = "{0}|{1}|{2}|{3}|{4}|{5}|{6}" -f $rel.date, (Normalize-Key $rel.meet), (Normalize-Key $rel.event), $rel.category, $rel.gender, $rel.pool, (Normalize-Key $lbl)
+            if (-not $seen.Add($rk)) { continue }
+
+            $swimmerList = if ($null -ne $rel.PSObject.Properties["swimmers"] -and $rel.swimmers) { @($rel.swimmers) } else { @() }
+            $swimmerIds = New-Object System.Collections.Generic.List[string]
+            foreach ($sw in $swimmerList) {
+                $sk = (Normalize-Key ([string]$sw)) -replace '\s+', ''
+                if ($athleteIdByNormName.ContainsKey($sk)) {
+                    [void]$swimmerIds.Add($athleteIdByNormName[$sk])
+                }
+            }
+
+            [void]$out.Add([ordered]@{
+                date = $rel.date
+                meet = $rel.meet
+                city = $rel.city
+                pool = $rel.pool
+                event = $rel.event
+                category = $rel.category
+                gender = $rel.gender
+                teamLabel = $lbl
+                swimmers = [object[]]@($swimmerList)
+                swimmerIds = [object[]]$swimmerIds.ToArray()
+                time = $rel.time
+                timeCs = $rel.timeCs
+                status = $rel.status
+                position = if ($IsStartlist) { "" } else { $rel.position }
+                notes = if ($null -ne $rel.PSObject.Properties["notes"]) { [string]$rel.notes } else { "" }
+                sourceType = if ($IsStartlist) { "startlist" } else { $rel.sourceType }
+                isLive = if ($null -ne $rel.PSObject.Properties["isLive"]) { [bool]$rel.isLive } else { $false }
+            })
+        }
+        return [object[]]$out.ToArray()
+    }
+
     $sortedResults = [object[]]@($normalizedResults | Sort-Object date, event, athleteId)
     $sortedEntries = [object[]]@($normalizedEntries | Sort-Object date, event, athleteId)
-    $sortedRelays = [object[]]@($Relays | Sort-Object date, event)
+    $sortedRelays = [object[]]@((& $normalizeRelayList $allOfficialRelays.ToArray() $false) | Sort-Object date, event, category)
+    $sortedRelayEntries = [object[]]@((& $normalizeRelayList $StartlistRelays $true) | Sort-Object date, event, category)
 
     return [ordered]@{
         clubName = $Config.clubName
@@ -616,6 +736,7 @@ function Build-Dataset([object[]]$OfficialResults, [object[]]$ManualResults, [ob
         results = $sortedResults
         entries = $sortedEntries
         relays = $sortedRelays
+        relayEntries = $sortedRelayEntries
     }
 }
 
@@ -747,12 +868,14 @@ function Decrypt-DatasetJson([object]$Envelope, [string]$Passphrase) {
 }
 
 function Get-DatasetFingerprint([object]$Dataset) {
+    $relayEntries = if ($null -ne $Dataset.PSObject.Properties["relayEntries"]) { $Dataset.relayEntries } else { @() }
     $core = [ordered]@{
         clubName = $Dataset.clubName
         athletes = $Dataset.athletes
         results = $Dataset.results
         entries = $Dataset.entries
         relays = $Dataset.relays
+        relayEntries = $relayEntries
     }
     return ($core | ConvertTo-Json -Depth 10 -Compress)
 }
@@ -766,6 +889,7 @@ if ($MyInvocation.InvocationName -ne '.') {
     $officialResults = New-Object System.Collections.Generic.List[object]
     $startlistEntries = New-Object System.Collections.Generic.List[object]
     $relays = New-Object System.Collections.Generic.List[object]
+    $startlistRelays = New-Object System.Collections.Generic.List[object]
     $manualResults = New-Object System.Collections.Generic.List[object]
 
     if (-not $SkipRemote) {
@@ -791,7 +915,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             }
         }
 
-        # 2) Startlist pubbliche (anagrafica + iscrizioni)
+        # 2) Startlist pubbliche (anagrafica + iscrizioni + staffette iscritte)
         $slDiscovery = Discover-MeetPages $baseUrl $areaHtml $startlistIndexHtml $config.startlistPath
         $slUrls = if ($slDiscovery.Urls.Count -gt 0) { @($slDiscovery.Urls) } else { @("$baseUrl$($config.startlistPath)") }
         foreach ($u in ($slUrls | Select-Object -Unique)) {
@@ -799,6 +923,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                 $html = Fetch-UrlUtf8 $u
                 $parsed = Parse-SlmPage $html "startlist" $clubRegex $config.defaultPoolLength $slDiscovery.MeetMeta $u
                 foreach ($r in $parsed.Records) { [void]$startlistEntries.Add($r) }
+                foreach ($rel in $parsed.Relays) { [void]$startlistRelays.Add($rel) }
             } catch {
                 Write-Warning "Impossibile leggere pagina startlist $u : $($_.Exception.Message)"
             }
@@ -875,12 +1000,19 @@ if ($MyInvocation.InvocationName -ne '.') {
                     })
                 }
             }
+            if ($null -ne $existingPlainDataset.PSObject.Properties["relays"]) {
+                foreach ($erel in @($existingPlainDataset.relays)) {
+                    if ($null -ne $erel.PSObject.Properties["sourceType"] -and $erel.sourceType -eq "historical") {
+                        [void]$relays.Add($erel)
+                    }
+                }
+            }
         } catch {
             $existingPlainDataset = $null
         }
     }
 
-    $dataset = Build-Dataset $officialResults.ToArray() $manualResults.ToArray() $startlistEntries.ToArray() $relays.ToArray() $config
+    $dataset = Build-Dataset $officialResults.ToArray() $manualResults.ToArray() $startlistEntries.ToArray() $relays.ToArray() $config $startlistRelays.ToArray()
     $datasetJson = $dataset | ConvertTo-Json -Depth 10 -Compress
 
     if ($PlaintextTestOutput) {
@@ -900,6 +1032,6 @@ if ($MyInvocation.InvocationName -ne '.') {
         $encryptedEnvelope = Encrypt-DatasetJson $datasetJson $Password
         $envelopeJson = $encryptedEnvelope | ConvertTo-Json -Depth 5
         Write-Utf8File $OutputPath $envelopeJson
-        Write-Host ("Completato! Atleti: {0} | Risultati: {1} | Iscrizioni startlist: {2} -> {3}" -f $dataset.athletes.Count, $dataset.results.Count, $dataset.entries.Count, $OutputPath)
+        Write-Host ("Completato! Atleti: {0} | Risultati: {1} | Staffette: {2} | Iscrizioni: {3} | Staffette startlist: {4} -> {5}" -f $dataset.athletes.Count, $dataset.results.Count, $dataset.relays.Count, $dataset.entries.Count, $dataset.relayEntries.Count, $OutputPath)
     }
 }

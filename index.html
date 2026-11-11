@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0284c7">
   <title>Dinamica Sport · Tempi Gare & Personal Best</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20261112">
 </head>
 <body>
   <!-- SCHERMATA DI ACCESSO CON PASSWORD SQUADRA -->
@@ -66,9 +66,6 @@
           </div>
         </div>
         <div class="topbar-actions">
-          <button type="button" id="demo-toggle-btn" class="btn btn-ghost btn-sm" title="Mostra dati di esempio per provare grafici e PB">
-            Anteprima Demo
-          </button>
           <button type="button" id="logout-btn" class="btn btn-outline btn-sm">
             Esci
           </button>
@@ -83,6 +80,9 @@
       <nav class="nav-tabs" aria-label="Sezioni principali">
         <button type="button" class="nav-tab active" data-view="athletes">
           Atleti &amp; Categorie
+        </button>
+        <button type="button" class="nav-tab" data-view="relays">
+          Staffette
         </button>
         <button type="button" class="nav-tab" data-view="ranking">
           Classifica PB
@@ -157,11 +157,60 @@
         <div class="card">
           <div class="subtabs">
             <button type="button" class="subtab active" data-subtab="history">Storico Risultati</button>
+            <button type="button" class="subtab" data-subtab="relays">Staffette</button>
             <button type="button" class="subtab" data-subtab="entries">Prossime Iscrizioni (Startlist)</button>
           </div>
           <div id="athlete-history-panel"></div>
+          <div id="athlete-relays-panel" class="hidden"></div>
           <div id="athlete-entries-panel" class="hidden"></div>
         </div>
+      </section>
+
+      <!-- VISTA 2B: STAFFETTE PER CATEGORIA -->
+      <section id="view-relays" class="view-panel hidden">
+        <div class="filters-card">
+          <div class="ranking-filters">
+            <div class="field-group">
+              <label for="relay-category-select">Categoria</label>
+              <select id="relay-category-select" class="select-full"></select>
+            </div>
+            <div class="field-group">
+              <label for="relay-gender-select">Sesso / Tipo</label>
+              <select id="relay-gender-select" class="select-full">
+                <option value="ALL">Tutte</option>
+                <option value="F">Femmine</option>
+                <option value="M">Maschi</option>
+                <option value="Mista">Mista / Open</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label for="relay-pool-select">Vasca</label>
+              <select id="relay-pool-select" class="select-full">
+                <option value="ALL">Tutte</option>
+                <option value="25m">25 m</option>
+                <option value="50m">50 m</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label for="relay-chart-select">Andamento Staffetta</label>
+              <select id="relay-chart-select" class="select-full"></select>
+            </div>
+          </div>
+        </div>
+
+        <div id="relay-chart-card" class="card hidden">
+          <div class="card-header">
+            <div>
+              <h2>Andamento Staffetta nel tempo</h2>
+              <span class="muted-small">Obiettivo: scendere verso il record di squadra</span>
+            </div>
+          </div>
+          <div id="relay-chart-stats-row" class="chart-stats-row"></div>
+          <div id="relay-chart-container" class="chart-container"></div>
+          <div id="relay-chart-point-detail" class="chart-point-detail hidden"></div>
+        </div>
+
+        <div id="relays-categories-container" class="athletes-groups"></div>
       </section>
 
       <!-- VISTA 3: CLASSIFICA PB DI SQUADRA -->
@@ -217,7 +266,6 @@
               <li><strong>Da PC Windows:</strong> fai doppio clic su <code>aggiorna-dati.bat</code>.</li>
               <li><strong>Automatico online (GitHub):</strong> si aggiorna da solo ogni domenica sera e lunedì mattina, oppure con un clic su <em>Run workflow</em> anche dal telefono.</li>
             </ul>
-            <div id="relays-box" class="relays-box"></div>
           </div>
 
           <div class="card">
@@ -269,7 +317,7 @@
     </main>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=20261112"></script>
 </body>
 </html>
 

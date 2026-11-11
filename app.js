@@ -10,7 +10,6 @@
     envelope: null,
     realDataset: null,
     activeDataset: null,
-    demoMode: false,
     currentView: 'athletes',
     selectedCategory: 'ALL',
     selectedGender: 'ALL',
@@ -34,12 +33,12 @@
     manualEncFile: document.getElementById('manual-enc-file'),
     clubTitle: document.getElementById('club-title'),
     lastUpdatedText: document.getElementById('last-updated-text'),
-    demoToggleBtn: document.getElementById('demo-toggle-btn'),
     logoutBtn: document.getElementById('logout-btn'),
     statusBanner: document.getElementById('status-banner'),
     navTabs: document.querySelectorAll('.nav-tab'),
     viewAthletes: document.getElementById('view-athletes'),
     viewDetail: document.getElementById('view-detail'),
+    viewRelays: document.getElementById('view-relays'),
     viewRanking: document.getElementById('view-ranking'),
     viewCoach: document.getElementById('view-coach'),
     athleteSearch: document.getElementById('athlete-search'),
@@ -56,14 +55,23 @@
     chartPointDetail: document.getElementById('chart-point-detail'),
     subtabs: document.querySelectorAll('.subtab'),
     athleteHistoryPanel: document.getElementById('athlete-history-panel'),
+    athleteRelaysPanel: document.getElementById('athlete-relays-panel'),
     athleteEntriesPanel: document.getElementById('athlete-entries-panel'),
+    relayCategorySelect: document.getElementById('relay-category-select'),
+    relayGenderSelect: document.getElementById('relay-gender-select'),
+    relayPoolSelect: document.getElementById('relay-pool-select'),
+    relayChartSelect: document.getElementById('relay-chart-select'),
+    relayChartCard: document.getElementById('relay-chart-card'),
+    relayChartStatsRow: document.getElementById('relay-chart-stats-row'),
+    relayChartContainer: document.getElementById('relay-chart-container'),
+    relayChartPointDetail: document.getElementById('relay-chart-point-detail'),
+    relaysCategoriesContainer: document.getElementById('relays-categories-container'),
     rankEventSelect: document.getElementById('rank-event-select'),
     rankCategorySelect: document.getElementById('rank-category-select'),
     rankGenderSelect: document.getElementById('rank-gender-select'),
     rankPoolSelect: document.getElementById('rank-pool-select'),
     rankCountLabel: document.getElementById('rank-count-label'),
     rankingTableWrap: document.getElementById('ranking-table-wrap'),
-    relaysBox: document.getElementById('relays-box'),
     manualCsvForm: document.getElementById('manual-csv-form'),
     athletesDatalist: document.getElementById('athletes-datalist'),
     csvOutputWrap: document.getElementById('csv-output-wrap'),
@@ -284,67 +292,64 @@
     return pbs;
   }
 
-  function buildDemoDataset(baseDataset) {
-    const cloned = JSON.parse(JSON.stringify(baseDataset));
-    const sampleAthletes = [];
-    const seenCats = new Set();
-    for (const a of cloned.athletes || []) {
-      if (!seenCats.has(a.category)) {
-        seenCats.add(a.category);
-        sampleAthletes.push(a);
-      } else if (sampleAthletes.length < 10) {
-        sampleAthletes.push(a);
+  /* ==================== RENDERING ==================== */
+
+  function computeRelayPbKeys(relays) {
+    const bestByGroup = new Map();
+    for (const rel of relays || []) {
+      if (!Number.isFinite(rel.timeCs) || rel.timeCs <= 0) continue;
+      const gk = `${rel.category}|${rel.gender}|${rel.event}`;
+      const cur = bestByGroup.get(gk);
+      if (!cur || rel.timeCs < cur.timeCs) {
+        bestByGroup.set(gk, rel);
       }
     }
-
-    const demoMeets = [
-      { date: '2026-01-18', meet: 'I Tappa Inverno (Demo)', city: 'Torino', pool: '25m' },
-      { date: '2026-02-22', meet: 'II Tappa Regionale (Demo)', city: 'Pinerolo', pool: '25m' },
-      { date: '2026-03-29', meet: 'III Tappa Primavera (Demo)', city: 'Cuneo', pool: '25m' },
-      { date: '2026-05-17', meet: 'Trofeo Estivo (Demo)', city: 'Torino', pool: '50m' }
-    ];
-
-    const demoEvents = [
-      { event: '50 m Stile libero', baseCs: 3380 },
-      { event: '50 m Dorso', baseCs: 3940 },
-      { event: '100 m Misti', baseCs: 8120 }
-    ];
-
-    const demoResults = [...(cloned.results || [])];
-    sampleAthletes.forEach((athlete, idx) => {
-      const catBoost = idx * 140;
-      demoEvents.forEach((ev, evIdx) => {
-        if (idx % 2 === 1 && evIdx === 2) return;
-        demoMeets.forEach((m, mIdx) => {
-          const longPoolPenalty = m.pool === '50m' ? 110 : 0;
-          const progress = mIdx === 0 ? 180 : mIdx === 1 ? 85 : mIdx === 2 ? -35 : 40;
-          const cs = Math.max(2450, ev.baseCs + catBoost + progress + longPoolPenalty);
-          demoResults.push({
-            athleteId: athlete.id,
-            date: m.date,
-            meet: m.meet,
-            city: m.city,
-            pool: m.pool,
-            event: ev.event,
-            category: athlete.category,
-            gender: athlete.gender,
-            time: formatCentis(cs),
-            timeCs: cs,
-            status: 'OK',
-            position: String((idx + mIdx) % 6 + 1),
-            notes: mIdx === 2 ? 'Demo PB' : '',
-            sourceType: 'demo',
-            isLive: false
-          });
-        });
-      });
-    });
-
-    cloned.results = demoResults;
-    return cloned;
+    const keys = new Set();
+    for (const best of bestByGroup.values()) {
+      keys.add(`${best.category}|${best.gender}|${best.event}|${best.date}|${best.timeCs}|${best.teamLabel}`);
+    }
+    return keys;
   }
 
-  /* ==================== RENDERING ==================== */
+  function relayRecordKey(rel) {
+    return `${rel.category}|${rel.gender}|${rel.event}|${rel.date}|${rel.timeCs}|${rel.teamLabel}`;
+  }
+
+  function genderLabel(g) {
+    if (g === 'F') return 'Femmine';
+    if (g === 'M') return 'Maschi';
+    if (g === 'Mista') return 'Mista';
+    return g || '—';
+  }
+
+  function renderRelayCardHtml(rel, pbKeys, isStartlist = false) {
+    const isPb = !isStartlist && Number.isFinite(rel.timeCs) && pbKeys.has(relayRecordKey(rel));
+    const gCls = rel.gender === 'F' ? 'relay-gender-F' : rel.gender === 'M' ? 'relay-gender-M' : rel.gender === 'Mista' ? 'relay-gender-Mista' : '';
+    const swimmers = Array.isArray(rel.swimmers) && rel.swimmers.length > 0 ? rel.swimmers : [];
+    const legsHtml = swimmers.length > 0
+      ? `<div class="relay-legs">${swimmers.map((s, idx) => `${idx + 1}. ${escapeHtml(s)}`).join(' · ')}</div>`
+      : (rel.teamLabel && rel.teamLabel !== 'Dinamica Sport' ? `<div class="relay-legs">${escapeHtml(rel.teamLabel)}</div>` : '');
+    const posTxt = !isStartlist && rel.position ? ` · ${rel.position}° posto` : '';
+    const rightBadge = isStartlist
+      ? `<span class="tag-startlist">Startlist</span>`
+      : `<span class="time-badge">${escapeHtml(rel.time || '—')}</span>${isPb ? '<span class="tag-pb">PB</span>' : ''}${rel.isLive ? '<span class="tag-live">LIVE</span>' : ''}`;
+
+    return `
+      <div class="relay-card">
+        <div class="relay-card-top">
+          <div>
+            <div class="relay-event-name">${escapeHtml(rel.event)}</div>
+            <div class="relay-meta">
+              <span class="relay-gender-pill ${gCls}">${escapeHtml(genderLabel(rel.gender))}</span>
+              ${escapeHtml(formatDateIt(rel.date))} · ${escapeHtml(rel.meet)} (${escapeHtml(rel.pool || '25m')})${escapeHtml(posTxt)}
+            </div>
+          </div>
+          <div class="pb-right">${rightBadge}</div>
+        </div>
+        ${legsHtml}
+      </div>
+    `;
+  }
 
   function renderApp() {
     const ds = state.activeDataset;
@@ -353,27 +358,21 @@
     els.clubTitle.textContent = ds.clubName || 'Dinamica Sport s.s.d. a r.l.';
     els.lastUpdatedText.textContent = `Aggiornato: ${formatDateTimeIt(ds.generatedAt)}`;
 
-    if (state.demoMode) {
-      els.demoToggleBtn.textContent = 'Esci da Demo';
-      els.demoToggleBtn.classList.add('active-demo');
-      els.statusBanner.textContent = 'MODALITÀ DEMO ATTIVA: stai visualizzando tempi simulati per provare PB e grafici. Clicca "Esci da Demo" per tornare ai dati reali.';
-      els.statusBanner.className = 'banner banner-demo';
+    const resCount = (ds.results || []).length;
+    const entCount = (ds.entries || []).length;
+    const relCount = (ds.relays || []).length;
+    if (resCount === 0 && relCount === 0) {
+      els.statusBanner.innerHTML =
+        `Ancora nessun risultato ufficiale pubblicato su <strong>nuotopiemonte-uisp.it</strong>. Sono già caricati <strong>${(ds.athletes || []).length} atleti</strong> per categoria e <strong>${entCount} iscrizioni</strong> in startlist.`;
+      els.statusBanner.className = 'banner';
     } else {
-      els.demoToggleBtn.textContent = 'Anteprima Demo';
-      els.demoToggleBtn.classList.remove('active-demo');
-      const resCount = (ds.results || []).length;
-      const entCount = (ds.entries || []).length;
-      if (resCount === 0) {
-        els.statusBanner.innerHTML =
-          `Ancora nessun risultato ufficiale pubblicato su <strong>nuotopiemonte-uisp.it</strong>. Sono già caricati <strong>${(ds.athletes || []).length} atleti</strong> per categoria e <strong>${entCount} iscrizioni</strong> in startlist. Usa <strong>Anteprima Demo</strong> in alto per provare subito PB e grafici!`;
-        els.statusBanner.className = 'banner';
-      } else {
-        els.statusBanner.className = 'banner hidden';
-      }
+      els.statusBanner.className = 'banner hidden';
     }
 
     renderCategoryPills();
     renderAthletesView();
+    renderRelayFilters();
+    renderRelaysView();
     renderRankingFilters();
     renderRankingView();
     renderCoachView();
@@ -388,6 +387,7 @@
     state.currentView = viewName;
     els.viewAthletes.classList.toggle('hidden', viewName !== 'athletes');
     els.viewDetail.classList.toggle('hidden', viewName !== 'detail');
+    els.viewRelays.classList.toggle('hidden', viewName !== 'relays');
     els.viewRanking.classList.toggle('hidden', viewName !== 'ranking');
     els.viewCoach.classList.toggle('hidden', viewName !== 'coach');
 
@@ -398,9 +398,9 @@
     });
   }
 
-  function getOrderedCategories(athletes) {
+  function getOrderedCategories(items) {
     const order = state.activeDataset?.categoryOrder || [];
-    const cats = Array.from(new Set((athletes || []).map((a) => a.category || 'Altro')));
+    const cats = Array.from(new Set((items || []).map((a) => a.category || 'Altro')));
     cats.sort((a, b) => {
       const ia = order.indexOf(a);
       const ib = order.indexOf(b);
@@ -468,6 +468,17 @@
       entByAthlete.get(e.athleteId).push(e);
     }
 
+    const allRelays = ds.relays || [];
+    const relayPbKeys = computeRelayPbKeys(allRelays);
+    const matchesRelayFilter = (rel) => {
+      if (state.selectedGender !== 'ALL' && rel.gender !== state.selectedGender && rel.gender !== 'Mista') return false;
+      if (q) {
+        const hay = `${rel.event} ${rel.category} ${rel.teamLabel || ''} ${(rel.swimmers || []).join(' ')}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    };
+
     const grouped = new Map();
     for (const cat of getOrderedCategories(filtered)) {
       grouped.set(cat, []);
@@ -509,6 +520,27 @@
         })
         .join('');
 
+      const catRelays = allRelays.filter((rel) => rel.category === cat && matchesRelayFilter(rel));
+      const catRelayEntries = (ds.relayEntries || []).filter((rel) => rel.category === cat && matchesRelayFilter(rel));
+      let relaysHtml = '';
+      if (catRelays.length > 0 || catRelayEntries.length > 0) {
+        const sortedCatRelays = [...catRelays].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        const sortedCatEntries = [...catRelayEntries].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+        const cards = [
+          ...sortedCatRelays.map((rel) => renderRelayCardHtml(rel, relayPbKeys, false)),
+          ...sortedCatEntries.map((rel) => renderRelayCardHtml(rel, relayPbKeys, true))
+        ].join('');
+        relaysHtml = `
+          <div class="category-relays-wrap">
+            <div class="category-relays-header">
+              <div class="category-relays-title">Staffette · ${escapeHtml(cat)} (${catRelays.length + catRelayEntries.length})</div>
+              <button type="button" class="link-btn" data-open-relay-cat="${escapeHtml(cat)}">Vedi tutte &rarr;</button>
+            </div>
+            <div class="relay-grid">${cards}</div>
+          </div>
+        `;
+      }
+
       htmlParts.push(`
         <section class="category-section">
           <div class="category-heading">
@@ -516,6 +548,7 @@
             <span class="count-pill">${list.length} atlet${list.length === 1 ? 'a' : 'i'}</span>
           </div>
           <div class="athletes-grid">${cardsHtml}</div>
+          ${relaysHtml}
         </section>
       `);
     }
@@ -524,6 +557,14 @@
     els.athletesContainer.querySelectorAll('.athlete-card').forEach((card) => {
       card.addEventListener('click', () => {
         openAthleteDetail(card.dataset.athleteId);
+      });
+    });
+    els.athletesContainer.querySelectorAll('[data-open-relay-cat]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        els.relayCategorySelect.value = btn.dataset.openRelayCat;
+        renderRelaysView();
+        switchView('relays');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       });
     });
   }
@@ -549,6 +590,14 @@
     const aRes = (ds.results || []).filter((r) => r.athleteId === athleteId);
     const aEnt = (ds.entries || []).filter((e) => e.athleteId === athleteId);
     const pbs = computeAthletePBs(aRes);
+
+    const normAthleteName = athlete.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const matchRelayMember = (rel) => {
+      if (Array.isArray(rel.swimmerIds) && rel.swimmerIds.includes(athleteId)) return true;
+      return Array.isArray(rel.swimmers) && rel.swimmers.some((s) => s.toLowerCase().replace(/[^a-z0-9]/g, '') === normAthleteName);
+    };
+    const aRelays = (ds.relays || []).filter(matchRelayMember);
+    const aRelayEntries = (ds.relayEntries || []).filter(matchRelayMember);
 
     const subMeta = [
       athlete.category,
@@ -638,24 +687,14 @@
       renderProgressionChart(aRes, state.selectedChartEvent, state.selectedChartPool);
     }
 
-    renderAthleteSubtabs(aRes, aEnt, pbs);
+    renderAthleteSubtabs(aRes, aEnt, pbs, aRelays, aRelayEntries);
   }
 
-  function renderProgressionChart(athleteResults, eventName, poolFilter) {
-    const series = athleteResults
-      .filter(
-        (r) =>
-          r.event === eventName &&
-          Number.isFinite(r.timeCs) &&
-          r.timeCs > 0 &&
-          (poolFilter === 'ALL' || r.pool === poolFilter)
-      )
-      .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-
-    if (series.length === 0) {
-      els.chartStatsRow.innerHTML = '';
-      els.chartContainer.innerHTML = '<div class="empty-state">Nessun tempo valido per questa selezione.</div>';
-      els.chartPointDetail.classList.add('hidden');
+  function renderTimeSeriesSvg({ series, ariaLabel, statsEl, chartEl, detailEl, pbText = 'Record Personale (PB)!', getExtraLine = null }) {
+    if (!series || series.length === 0) {
+      statsEl.innerHTML = '';
+      chartEl.innerHTML = '<div class="empty-state">Nessun tempo valido per questa selezione.</div>';
+      detailEl.classList.add('hidden');
       return;
     }
 
@@ -665,14 +704,13 @@
     const avgCs = Math.round(series.reduce((acc, s) => acc + s.timeCs, 0) / series.length);
     const totalProg = series.length > 1 ? latest.timeCs - first.timeCs : null;
 
-    els.chartStatsRow.innerHTML = `
+    statsEl.innerHTML = `
       <span class="stat-chip">PB: <strong>${escapeHtml(formatCentis(pbItem.timeCs))}</strong></span>
       <span class="stat-chip">Ultimo: <strong>${escapeHtml(formatCentis(latest.timeCs))}</strong></span>
       <span class="stat-chip">Media: <strong>${escapeHtml(formatCentis(avgCs))}</strong></span>
       ${totalProg !== null ? `<span class="stat-chip">Variazione 1ª→Ultima: <strong>${escapeHtml(formatDelta(totalProg))}</strong></span>` : ''}
     `;
 
-    // Dimensioni logiche SVG
     const W = 620;
     const H = 270;
     const padL = 68;
@@ -695,10 +733,8 @@
       if (series.length === 1) return padL + plotW / 2;
       return padL + (idx / (series.length - 1)) * plotW;
     };
-    // Tempo piu' basso in basso (scala crescente)
     const yFor = (cs) => padT + ((maxCs - cs) / yRange) * plotH;
 
-    // Griglia Y (5 tacche)
     const yTicks = 4;
     const gridLines = [];
     for (let i = 0; i <= yTicks; i++) {
@@ -711,18 +747,15 @@
       `);
     }
 
-    // Linea riferimento PB
     const pbY = yFor(pbItem.timeCs);
     const pbLineHtml = `
       <line x1="${padL}" y1="${pbY.toFixed(1)}" x2="${W - padR}" y2="${pbY.toFixed(1)}" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="5 4" />
       <text x="${W - padR}" y="${Math.max(14, pbY - 5).toFixed(1)}" text-anchor="end" font-size="11" font-weight="700" fill="#15803d">PB ${escapeHtml(formatCentis(pbItem.timeCs))}</text>
     `;
 
-    // Polilinea + area morbida
     const coords = series.map((item, idx) => ({ x: xFor(idx), y: yFor(item.timeCs), item, idx }));
     const pathD = coords.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
 
-    // Etichette asse X (evita sovrapposizioni se tante gare)
     const step = series.length > 7 ? Math.ceil(series.length / 6) : 1;
     const xLabels = coords
       .filter((_, i) => i === 0 || i === coords.length - 1 || i % step === 0)
@@ -745,8 +778,8 @@
       })
       .join('');
 
-    els.chartContainer.innerHTML = `
-      <svg class="swim-chart-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Grafico andamento ${escapeHtml(eventName)}">
+    chartEl.innerHTML = `
+      <svg class="swim-chart-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escapeHtml(ariaLabel)}">
         ${gridLines.join('')}
         ${pbLineHtml}
         ${series.length > 1 ? `<path d="${pathD}" fill="none" stroke="#0284c7" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />` : ''}
@@ -759,27 +792,49 @@
       const pt = series[idx];
       if (!pt) return;
       const diff = pt.timeCs - pbItem.timeCs;
-      const diffLabel = diff === 0 ? 'Record Personale (PB)!' : `${formatDelta(diff)} dal PB`;
+      const diffLabel = diff === 0 ? pbText : `${formatDelta(diff)} dal PB`;
       const posTxt = pt.position ? ` · ${pt.position}° posto` : '';
-      els.chartPointDetail.innerHTML = `
-        <strong>${escapeHtml(formatDateIt(pt.date))}</strong> · ${escapeHtml(pt.meet)} (${escapeHtml(pt.pool)})<br>
-        Tempo: <strong class="mono-time">${escapeHtml(pt.time)}</strong> (${escapeHtml(diffLabel)})${escapeHtml(posTxt)}
+      const extra = getExtraLine ? getExtraLine(pt) : '';
+      detailEl.innerHTML = `
+        <strong>${escapeHtml(formatDateIt(pt.date))}</strong> · ${escapeHtml(pt.meet)} (${escapeHtml(pt.pool || '25m')})<br>
+        Tempo: <strong class="mono-time">${escapeHtml(pt.time)}</strong> (${escapeHtml(diffLabel)})${escapeHtml(posTxt)}${extra ? `<br><span class="muted-small">${escapeHtml(extra)}</span>` : ''}
       `;
-      els.chartPointDetail.classList.remove('hidden');
+      detailEl.classList.remove('hidden');
     };
 
     showPointDetail(series.length - 1);
-    els.chartContainer.querySelectorAll('.chart-pt').forEach((node) => {
+    chartEl.querySelectorAll('.chart-pt').forEach((node) => {
       node.addEventListener('click', () => showPointDetail(parseInt(node.dataset.ptIdx, 10)));
       node.addEventListener('mouseenter', () => showPointDetail(parseInt(node.dataset.ptIdx, 10)));
     });
   }
 
-  function renderAthleteSubtabs(aRes, aEnt, pbs) {
+  function renderProgressionChart(athleteResults, eventName, poolFilter) {
+    const series = athleteResults
+      .filter(
+        (r) =>
+          r.event === eventName &&
+          Number.isFinite(r.timeCs) &&
+          r.timeCs > 0 &&
+          (poolFilter === 'ALL' || r.pool === poolFilter)
+      )
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+    renderTimeSeriesSvg({
+      series,
+      ariaLabel: `Grafico andamento ${eventName}`,
+      statsEl: els.chartStatsRow,
+      chartEl: els.chartContainer,
+      detailEl: els.chartPointDetail
+    });
+  }
+
+  function renderAthleteSubtabs(aRes, aEnt, pbs, aRelays = [], aRelayEntries = []) {
     const pbKeys = new Set(pbs.map((p) => `${p.event}|${p.pbResult.date}|${p.pbResult.timeCs}`));
 
     els.subtabs.forEach((b) => b.classList.toggle('active', b.dataset.subtab === state.selectedSubtab));
     els.athleteHistoryPanel.classList.toggle('hidden', state.selectedSubtab !== 'history');
+    els.athleteRelaysPanel.classList.toggle('hidden', state.selectedSubtab !== 'relays');
     els.athleteEntriesPanel.classList.toggle('hidden', state.selectedSubtab !== 'entries');
 
     const sortedRes = [...aRes].sort((a, b) => (b.date || '').localeCompare(a.date || '') || compareEvents(a.event, b.event));
@@ -845,6 +900,131 @@
         </div>
       `;
     }
+
+    const combinedAthleteRelays = [
+      ...aRelays.map((r) => ({ ...r, _isEntry: false })),
+      ...aRelayEntries.map((r) => ({ ...r, _isEntry: true }))
+    ];
+    if (combinedAthleteRelays.length === 0) {
+      els.athleteRelaysPanel.innerHTML = '<div class="empty-state">Nessuna staffetta associata a questo atleta (con formazione nominativa).</div>';
+    } else {
+      const pbKeysAll = computeRelayPbKeys(state.activeDataset?.relays || []);
+      const cards = combinedAthleteRelays
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+        .map((rel) => renderRelayCardHtml(rel, pbKeysAll, rel._isEntry))
+        .join('');
+      els.athleteRelaysPanel.innerHTML = `<div class="relay-grid">${cards}</div>`;
+    }
+  }
+
+  /* ==================== RELAYS VIEW ==================== */
+
+  function renderRelayFilters() {
+    const ds = state.activeDataset;
+    const allRelays = [...(ds.relays || []), ...(ds.relayEntries || [])];
+    const cats = getOrderedCategories(allRelays);
+    const prevCat = els.relayCategorySelect.value || 'ALL';
+    els.relayCategorySelect.innerHTML = [
+      `<option value="ALL" ${prevCat === 'ALL' ? 'selected' : ''}>Tutte le categorie</option>`,
+      ...cats.map((c) => `<option value="${escapeHtml(c)}" ${c === prevCat ? 'selected' : ''}>${escapeHtml(c)}</option>`)
+    ].join('');
+
+    const timedKeys = Array.from(
+      new Set((ds.relays || []).filter((r) => Number.isFinite(r.timeCs) && r.timeCs > 0).map((r) => `${r.category}|${r.gender}|${r.event}`))
+    ).sort();
+    const prevChart = els.relayChartSelect.value;
+    if (timedKeys.length === 0) {
+      els.relayChartSelect.innerHTML = '<option value="">Nessun tempo staffetta</option>';
+    } else {
+      els.relayChartSelect.innerHTML = timedKeys
+        .map((k) => {
+          const [cat, gen, ev] = k.split('|');
+          const lbl = `${cat} · ${genderLabel(gen)} · ${ev}`;
+          return `<option value="${escapeHtml(k)}" ${k === prevChart ? 'selected' : ''}>${escapeHtml(lbl)}</option>`;
+        })
+        .join('');
+    }
+  }
+
+  function renderRelaysView() {
+    const ds = state.activeDataset;
+    const selCat = els.relayCategorySelect.value || 'ALL';
+    const selGender = els.relayGenderSelect.value || 'ALL';
+    const selPool = els.relayPoolSelect.value || 'ALL';
+
+    const matchRelay = (r) => {
+      if (selCat !== 'ALL' && r.category !== selCat) return false;
+      if (selGender !== 'ALL' && r.gender !== selGender) return false;
+      if (selPool !== 'ALL' && r.pool !== selPool) return false;
+      return true;
+    };
+
+    const relays = (ds.relays || []).filter(matchRelay);
+    const relayEntries = (ds.relayEntries || []).filter(matchRelay);
+    const pbKeys = computeRelayPbKeys(ds.relays || []);
+
+    const chartKey = els.relayChartSelect.value;
+    if (!chartKey) {
+      els.relayChartCard.classList.add('hidden');
+    } else {
+      const [cCat, cGen, cEv] = chartKey.split('|');
+      const chartSeries = (ds.relays || [])
+        .filter(
+          (r) =>
+            r.category === cCat &&
+            r.gender === cGen &&
+            r.event === cEv &&
+            Number.isFinite(r.timeCs) &&
+            r.timeCs > 0 &&
+            (selPool === 'ALL' || r.pool === selPool)
+        )
+        .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+      if (chartSeries.length === 0) {
+        els.relayChartCard.classList.add('hidden');
+      } else {
+        els.relayChartCard.classList.remove('hidden');
+        renderTimeSeriesSvg({
+          series: chartSeries,
+          ariaLabel: `Andamento staffetta ${cCat} ${cEv}`,
+          statsEl: els.relayChartStatsRow,
+          chartEl: els.relayChartContainer,
+          detailEl: els.relayChartPointDetail,
+          pbText: 'Record Squadra (PB)!',
+          getExtraLine: (pt) => (pt.swimmers?.length ? `Formazione: ${pt.swimmers.join(', ')}` : '')
+        });
+      }
+    }
+
+    const combined = [
+      ...relays.map((r) => ({ ...r, _isEntry: false })),
+      ...relayEntries.map((r) => ({ ...r, _isEntry: true }))
+    ];
+    if (combined.length === 0) {
+      els.relaysCategoriesContainer.innerHTML = '<div class="card empty-state">Nessuna staffetta trovata con i filtri selezionati.</div>';
+      return;
+    }
+
+    const cats = getOrderedCategories(combined);
+    const sections = cats
+      .map((cat) => {
+        const list = combined
+          .filter((r) => r.category === cat)
+          .sort((a, b) => (b.date || '').localeCompare(a.date || '') || compareEvents(a.event, b.event));
+        const cards = list.map((rel) => renderRelayCardHtml(rel, pbKeys, rel._isEntry)).join('');
+        return `
+          <section class="category-section">
+            <div class="category-heading">
+              <h2>${escapeHtml(cat)}</h2>
+              <span class="count-pill">${list.length} staffett${list.length === 1 ? 'a' : 'e'}</span>
+            </div>
+            <div class="relay-grid">${cards}</div>
+          </section>
+        `;
+      })
+      .join('');
+
+    els.relaysCategoriesContainer.innerHTML = sections;
   }
 
   /* ==================== RANKING VIEW ==================== */
@@ -944,35 +1124,6 @@
     els.athletesDatalist.innerHTML = (ds.athletes || [])
       .map((a) => `<option value="${escapeHtml(a.name)}">`)
       .join('');
-
-    const relays = ds.relays || [];
-    if (relays.length === 0) {
-      els.relaysBox.innerHTML = '<p class="muted-small">Nessuna staffetta ufficiale registrata al momento.</p>';
-    } else {
-      els.relaysBox.innerHTML = `
-        <h3>Staffette ufficiali</h3>
-        <div class="table-wrap">
-          <table class="data-table">
-            <thead><tr><th>Data</th><th>Gara</th><th>Categoria</th><th>Formazione</th><th>Tempo</th></tr></thead>
-            <tbody>
-              ${relays
-                .map(
-                  (rel) => `
-                <tr>
-                  <td>${escapeHtml(formatDateIt(rel.date))}</td>
-                  <td>${escapeHtml(rel.event)}</td>
-                  <td>${escapeHtml(rel.category)}</td>
-                  <td>${escapeHtml(rel.teamLabel)}</td>
-                  <td class="mono-time">${escapeHtml(rel.time || '—')}</td>
-                </tr>
-              `
-                )
-                .join('')}
-            </tbody>
-          </table>
-        </div>
-      `;
-    }
   }
 
   /* ==================== AUTH & INIT ==================== */
@@ -1013,7 +1164,6 @@
     const decrypted = await decryptEnvelope(state.envelope, password);
     state.realDataset = decrypted;
     state.activeDataset = decrypted;
-    state.demoMode = false;
     savePassword(password);
 
     els.authScreen.classList.add('hidden');
@@ -1067,23 +1217,19 @@
       clearSavedPassword();
       state.realDataset = null;
       state.activeDataset = null;
-      state.demoMode = false;
       els.passwordInput.value = '';
       els.appShell.classList.add('hidden');
       els.authScreen.classList.remove('hidden');
-    });
-
-    els.demoToggleBtn.addEventListener('click', () => {
-      if (!state.realDataset) return;
-      state.demoMode = !state.demoMode;
-      state.activeDataset = state.demoMode ? buildDemoDataset(state.realDataset) : state.realDataset;
-      renderApp();
     });
 
     els.navTabs.forEach((tab) => {
       tab.addEventListener('click', () => {
         switchView(tab.dataset.view);
       });
+    });
+
+    [els.relayCategorySelect, els.relayGenderSelect, els.relayPoolSelect, els.relayChartSelect].forEach((sel) => {
+      sel.addEventListener('change', renderRelaysView);
     });
 
     els.athleteSearch.addEventListener('input', (e) => {

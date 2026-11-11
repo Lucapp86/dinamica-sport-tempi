@@ -220,12 +220,6 @@ textarea:focus {
   color: var(--primary-dark);
 }
 
-.btn-ghost.active-demo {
-  background: var(--gold-bg);
-  color: var(--gold-text);
-  border-color: #fcd34d;
-}
-
 .alert {
   padding: 10px 12px;
   border-radius: 10px;
@@ -312,12 +306,6 @@ textarea:focus {
   background: var(--primary-soft);
   color: #0c4a6e;
   border: 1px solid #bae6fd;
-}
-
-.banner.banner-demo {
-  background: var(--gold-bg);
-  color: var(--gold-text);
-  border-color: #fde68a;
 }
 
 /* TABS */
@@ -766,6 +754,111 @@ textarea:focus {
   background: var(--gold-bg);
   color: var(--gold-text);
   margin-left: 6px;
+}
+
+.tag-startlist {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+}
+
+/* STAFFETTE NELLE CATEGORIE E VISTA DEDICATA */
+.category-relays-wrap {
+  margin-top: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+}
+
+.category-relays-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.category-relays-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0c4a6e;
+}
+
+.relay-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+
+.relay-card {
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  border-radius: 11px;
+  padding: 11px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.relay-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.relay-event-name {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.relay-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.relay-legs {
+  font-size: 12px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin-top: 2px;
+  white-space: normal;
+}
+
+.relay-gender-pill {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+  margin-right: 4px;
+}
+
+.relay-gender-F {
+  background: var(--female-bg);
+  color: var(--female-text);
+}
+
+.relay-gender-M {
+  background: var(--male-bg);
+  color: var(--male-text);
+}
+
+.relay-gender-Mista {
+  background: #ede9fe;
+  color: #5b21b6;
 }
 
 /* RANKING FILTERS & COACH */

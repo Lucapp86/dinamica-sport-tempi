@@ -69,10 +69,15 @@ $c3 = Normalize-CategoryAndGender "Sessione 3 $dot Mista/Open $dot MASTER_M"
 Assert-Equal "Cat Master" $c3.category "Master"
 Assert-Equal "Gen Mista" $c3.gender "Mista"
 
-# 3. Test normalizzazione nome gara
+# 3. Test normalizzazione nome gara e staffette
 Assert-Equal "Evento 50 dorso" (Normalize-EventName "Gara 1 $([char]0x2014) 50 m Dorso") "50 m Dorso"
 Assert-Equal "Evento 100 misti" (Normalize-EventName "Gara 12 - 100m Misti") "100 m Misti"
 Assert-Equal "Evento 50 stile senza m" (Normalize-EventName "50 Stile Libero") "50 m Stile libero"
+Assert-Equal "Staffetta 200 misti -> 4x50" (Normalize-RelayEventName "Gara 24 $([char]0x2014) 200 m Misti" "M") "Staffetta 4x50 m Misti"
+Assert-Equal "Mistaffetta 200 misti -> 4x50" (Normalize-RelayEventName "Gara 61 $([char]0x2014) 200 m Misti" "Mista") "Mistaffetta 4x50 m Misti"
+$form1 = Parse-RelayFormation "Dinamica Sport s.s.d. a r.l. $([char]0x2014) A 1. CAPUZZI LORENZO / 2. ZINI ANTONIO / 3. CARRARA LEONARDO / 4. MICHIELIN RICCARDO Esordienti A/M"
+Assert-Equal "Formazione staffetta 4 frazionisti" $form1.swimmers.Count 4
+Assert-Equal "Frazionista 1" $form1.swimmers[0] "Capuzzi Lorenzo"
 
 # 4. Test parsing HTML risultati simulati (incluso Pos., societa accentata, SQ e staffetta)
 $sampleHtml = @"
@@ -109,6 +114,8 @@ Assert-Equal "Tempo Piana Ginevra" $parsed.Records[0].time "00'41.20"
 Assert-Equal "Posizione Piana Ginevra" $parsed.Records[0].position "1"
 Assert-Equal "Status Mazzara SQ" $parsed.Records[1].status "SQ"
 Assert-Equal "Categoria staffetta" $parsed.Relays[0].category "Esordienti A"
+Assert-Equal "Nome gara staffetta normalizzato" $parsed.Relays[0].event "Staffetta 4x50 m Mista"
+Assert-Equal "Frazionisti staffetta da HTML" $parsed.Relays[0].swimmers.Count 4
 
 # 5. Test merge + deduplicazione + preferenza categoria + array JSON singolo elemento
 $cfg = Read-Utf8File (Join-Path $rootDir "config.team.json") | ConvertFrom-Json

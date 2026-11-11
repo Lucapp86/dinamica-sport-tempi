@@ -11,7 +11,7 @@ Tutti i dati sono **cifrati (AES-256 + HMAC-SHA256)** con la **password di squad
 1. Fai doppio clic su **`avvia-app.bat`**.
 2. Si aprirà il browser su `http://127.0.0.1:8765`.
 3. Inserisci la password iniziale di esempio: **`dinamica2026`** *(consigliato cambiarla subito, vedi punto 2)*.
-4. In alto puoi anche cliccare **"Anteprima Demo"** per vedere subito come appaiono i **Personal Best**, i **grafici temporali** e la **Classifica PB** in attesa dei primi risultati ufficiali di domenica **15/11/2026**.
+4. Potrai subito esplorare atleti divisi per categoria, **Personal Best**, grafici temporali, classifiche di squadra e **staffette**.
 
 ---
 
