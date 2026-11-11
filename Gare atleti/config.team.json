@@ -1,0 +1,22 @@
+{
+  "clubName": "Dinamica Sport s.s.d. a r.l.",
+  "clubMatchRegex": "dinamica\\s+sport",
+  "sourceBaseUrl": "https://nuotopiemonte-uisp.it",
+  "publicAreaPath": "/area-pubblica/",
+  "resultsPath": "/risultati-uisp/",
+  "startlistPath": "/startlist-pubbliche/",
+  "categoryOrder": [
+    "Esordienti C",
+    "Esordienti B",
+    "Esordienti A",
+    "Ragazzi",
+    "Juniores",
+    "Cadetti",
+    "Seniores",
+    "Assoluti",
+    "Master",
+    "Altro"
+  ],
+  "defaultPoolLength": "25m"
+}
+
