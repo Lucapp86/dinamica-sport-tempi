@@ -35,7 +35,7 @@ if (-not $NoOpen) {
 try {
     while ($listener.IsListening) {
         $ctx = $listener.GetContext()
-        $reqPath = $ctx.Request.Url.AbsolutePath.TrimStart('/')
+        $reqPath = [Uri]::UnescapeDataString($ctx.Request.Url.AbsolutePath.TrimStart('/'))
         if ([string]::IsNullOrWhiteSpace($reqPath)) { $reqPath = "index.html" }
 
         $safeRel = $reqPath -replace '/', [System.IO.Path]::DirectorySeparatorChar

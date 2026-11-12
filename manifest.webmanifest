@@ -5,6 +5,12 @@
   "start_url": "./",
   "display": "standalone",
   "background_color": "#0b192c",
-  "theme_color": "#0284c7"
+  "theme_color": "#0284c7",
+  "icons": [
+    {
+      "src": "Logo%20tondo.png",
+      "sizes": "240x240",
+      "type": "image/png"
+    }
+  ]
 }
-
