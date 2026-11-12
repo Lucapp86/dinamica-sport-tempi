@@ -30,7 +30,6 @@
     authError: document.getElementById('auth-error'),
     unlockBtn: document.getElementById('unlock-btn'),
     localFallback: document.getElementById('local-file-fallback'),
-    manualEncFile: document.getElementById('manual-enc-file'),
     clubTitle: document.getElementById('club-title'),
     lastUpdatedText: document.getElementById('last-updated-text'),
     logoutBtn: document.getElementById('logout-btn'),
@@ -40,7 +39,6 @@
     viewDetail: document.getElementById('view-detail'),
     viewRelays: document.getElementById('view-relays'),
     viewRanking: document.getElementById('view-ranking'),
-    viewCoach: document.getElementById('view-coach'),
     athleteSearch: document.getElementById('athlete-search'),
     genderFilter: document.getElementById('gender-filter'),
     categoryPills: document.getElementById('category-pills'),
@@ -71,12 +69,7 @@
     rankGenderSelect: document.getElementById('rank-gender-select'),
     rankPoolSelect: document.getElementById('rank-pool-select'),
     rankCountLabel: document.getElementById('rank-count-label'),
-    rankingTableWrap: document.getElementById('ranking-table-wrap'),
-    manualCsvForm: document.getElementById('manual-csv-form'),
-    athletesDatalist: document.getElementById('athletes-datalist'),
-    csvOutputWrap: document.getElementById('csv-output-wrap'),
-    csvOutputBox: document.getElementById('csv-output-box'),
-    copyCsvBtn: document.getElementById('copy-csv-btn')
+    rankingTableWrap: document.getElementById('ranking-table-wrap')
   };
 
   /* ==================== UTILITY FORMATTING ==================== */
@@ -132,28 +125,6 @@
       hour: '2-digit',
       minute: '2-digit'
     });
-  }
-
-  function parseSwimTimeInput(raw) {
-    const s = String(raw || '').trim().toUpperCase().replace(/[’′]/g, "'").replace(',', '.');
-    const m = s.match(/^(\d{1,2})[:'.](\d{1,2})[."'](\d{1,2})$/);
-    if (m) {
-      const min = parseInt(m[1], 10);
-      const sec = parseInt(m[2], 10);
-      const cs = parseInt(m[3].padEnd(2, '0'), 10);
-      if (sec < 60) {
-        return `${String(min).padStart(2, '0')}'${String(sec).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
-      }
-    }
-    const sOnly = s.match(/^(\d{1,3})\.(\d{1,2})$/);
-    if (sOnly) {
-      const totalSec = parseInt(sOnly[1], 10);
-      const cs = parseInt(sOnly[2].padEnd(2, '0'), 10);
-      const min = Math.floor(totalSec / 60);
-      const sec = totalSec % 60;
-      return `${String(min).padStart(2, '0')}'${String(sec).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
-    }
-    return null;
   }
 
   function compareEvents(a, b) {
@@ -375,7 +346,6 @@
     renderRelaysView();
     renderRankingFilters();
     renderRankingView();
-    renderCoachView();
 
     if (state.currentView === 'detail' && state.selectedAthleteId) {
       renderAthleteDetail(state.selectedAthleteId);
@@ -389,7 +359,6 @@
     els.viewDetail.classList.toggle('hidden', viewName !== 'detail');
     els.viewRelays.classList.toggle('hidden', viewName !== 'relays');
     els.viewRanking.classList.toggle('hidden', viewName !== 'ranking');
-    els.viewCoach.classList.toggle('hidden', viewName !== 'coach');
 
     els.navTabs.forEach((tab) => {
       const target = tab.dataset.view;
@@ -1117,15 +1086,6 @@
     });
   }
 
-  /* ==================== COACH VIEW ==================== */
-
-  function renderCoachView() {
-    const ds = state.activeDataset;
-    els.athletesDatalist.innerHTML = (ds.athletes || [])
-      .map((a) => `<option value="${escapeHtml(a.name)}">`)
-      .join('');
-  }
-
   /* ==================== AUTH & INIT ==================== */
 
   function savePassword(pw) {
@@ -1202,17 +1162,6 @@
       }
     });
 
-    els.manualEncFile.addEventListener('change', async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      try {
-        state.envelope = JSON.parse(await file.text());
-        els.authError.classList.add('hidden');
-      } catch (_) {
-        showAuthError('File JSON non valido.');
-      }
-    });
-
     els.logoutBtn.addEventListener('click', () => {
       clearSavedPassword();
       state.realDataset = null;
@@ -1263,46 +1212,6 @@
 
     [els.rankEventSelect, els.rankCategorySelect, els.rankGenderSelect, els.rankPoolSelect].forEach((sel) => {
       sel.addEventListener('change', renderRankingView);
-    });
-
-    els.manualCsvForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const nameRaw = document.getElementById('m-athlete').value.trim();
-      const dateRaw = document.getElementById('m-date').value;
-      const evRaw = document.getElementById('m-event').value.trim();
-      const timeRaw = document.getElementById('m-time').value.trim();
-      const meetRaw = document.getElementById('m-meet').value.trim();
-      const poolRaw = document.getElementById('m-pool').value;
-
-      const normTime = parseSwimTimeInput(timeRaw);
-      if (!normTime) {
-        alert("Formato tempo non valido. Usa il formato xx'xx.xx (es. 00'34.50 o 01'12.40).");
-        return;
-      }
-
-      const matchedAthlete = (state.realDataset?.athletes || []).find(
-        (a) => a.name.toLowerCase() === nameRaw.toLowerCase()
-      );
-      const year = matchedAthlete?.birthYear || '';
-      const gender = matchedAthlete?.gender || '';
-      const cat = matchedAthlete?.category || '';
-      const tessera = matchedAthlete?.tessera || '';
-
-      const row = `${nameRaw.toUpperCase()};${year};${gender};${cat};${tessera};${dateRaw};${meetRaw};;${poolRaw};${evRaw};${normTime};;`;
-      els.csvOutputBox.value = row;
-      els.csvOutputWrap.classList.remove('hidden');
-    });
-
-    els.copyCsvBtn.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(els.csvOutputBox.value);
-        els.copyCsvBtn.textContent = 'Copiata!';
-        setTimeout(() => {
-          els.copyCsvBtn.textContent = 'Copia negli appunti';
-        }, 1500);
-      } catch (_) {
-        els.csvOutputBox.select();
-      }
     });
   }
 

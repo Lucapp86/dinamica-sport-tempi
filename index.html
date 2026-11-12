@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0284c7">
   <title>Dinamica Sport · Tempi Gare & Personal Best</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css?v=20261112">
+  <link rel="stylesheet" href="styles.css?v=20261112b">
 </head>
 <body>
   <!-- SCHERMATA DI ACCESSO CON PASSWORD SQUADRA -->
@@ -44,8 +44,7 @@
       </form>
 
       <div id="local-file-fallback" class="local-fallback hidden">
-        <p>Hai aperto il file direttamente dal disco (<code>file://</code>). Per comodità usa <strong>avvia-app.bat</strong> oppure seleziona qui il file dati:</p>
-        <input type="file" id="manual-enc-file" accept=".json">
+        <p>Hai aperto il file direttamente dal disco (<code>file://</code>). Usa il link online oppure avvia <strong>avvia-app.bat</strong> sul tuo PC.</p>
       </div>
 
       <p class="auth-footer">
@@ -86,9 +85,6 @@
         </button>
         <button type="button" class="nav-tab" data-view="ranking">
           Classifica PB
-        </button>
-        <button type="button" class="nav-tab" data-view="coach">
-          Strumenti Coach
         </button>
       </nav>
 
@@ -251,73 +247,10 @@
           <div id="ranking-table-wrap" class="table-wrap"></div>
         </div>
       </section>
-
-      <!-- VISTA 4: STRUMENTI COACH & AGGIORNAMENTO -->
-      <section id="view-coach" class="view-panel hidden">
-        <div class="grid-two-col">
-          <div class="card">
-            <div class="card-header">
-              <h2>Aggiornamento Automatico</h2>
-            </div>
-            <p class="coach-text">
-              I dati vengono estratti automaticamente da <strong>nuotopiemonte-uisp.it</strong> filtrando la società <strong>Dinamica Sport s.s.d. a r.l.</strong> e cifrati con la password di squadra.
-            </p>
-            <ul class="info-list">
-              <li><strong>Da PC Windows:</strong> fai doppio clic su <code>aggiorna-dati.bat</code>.</li>
-              <li><strong>Automatico online (GitHub):</strong> si aggiorna da solo ogni domenica sera e lunedì mattina, oppure con un clic su <em>Run workflow</em> anche dal telefono.</li>
-            </ul>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <h2>Aggiungi Tempo Manuale (CSV)</h2>
-              <span class="muted-small">Per gare extra o storici</span>
-            </div>
-            <form id="manual-csv-form" class="manual-form">
-              <div class="form-grid-2">
-                <div>
-                  <label for="m-athlete">Atleta</label>
-                  <input id="m-athlete" type="text" list="athletes-datalist" placeholder="COGNOME NOME" required>
-                  <datalist id="athletes-datalist"></datalist>
-                </div>
-                <div>
-                  <label for="m-date">Data gara</label>
-                  <input id="m-date" type="date" required>
-                </div>
-                <div>
-                  <label for="m-event">Gara</label>
-                  <input id="m-event" type="text" placeholder="es. 50 m Stile libero" required>
-                </div>
-                <div>
-                  <label for="m-time">Tempo (xx'xx.xx)</label>
-                  <input id="m-time" type="text" placeholder="00'32.45" required>
-                </div>
-                <div>
-                  <label for="m-meet">Manifestazione</label>
-                  <input id="m-meet" type="text" placeholder="Trofeo / Test" required>
-                </div>
-                <div>
-                  <label for="m-pool">Vasca</label>
-                  <select id="m-pool">
-                    <option value="25m">25m</option>
-                    <option value="50m">50m</option>
-                  </select>
-                </div>
-              </div>
-              <button type="submit" class="btn btn-primary btn-sm">Genera riga CSV</button>
-            </form>
-            <div id="csv-output-wrap" class="csv-output-wrap hidden">
-              <label for="csv-output-box">Copia questa riga nel file <code>data/manual_results.csv</code> (o nel tuo Google Sheet):</label>
-              <textarea id="csv-output-box" rows="2" readonly></textarea>
-              <button type="button" id="copy-csv-btn" class="btn btn-outline btn-sm">Copia negli appunti</button>
-            </div>
-          </div>
-        </div>
-      </section>
     </main>
   </div>
 
-  <script src="app.js?v=20261112"></script>
+  <script src="app.js?v=20261112b"></script>
 </body>
 </html>
 

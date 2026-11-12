@@ -17,9 +17,9 @@ Tutti i dati sono **cifrati (AES-256 + HMAC-SHA256)** con la **password di squad
 
 ## 2. Aggiornare i dati e cambiare la password di squadra
 
-* Fai doppio clic su **`aggiorna-dati.bat`**.
-* Scrivi la **nuova password di squadra** (che darai agli atleti e alle famiglie) e premi Invio.
-* Lo script si collega a `nuotopiemonte-uisp.it`, scarica startlist e risultati ufficiali per `Dinamica Sport s.s.d. a r.l.`, aggiorna le categorie (`Esordienti B`, `Esordienti A`, `Ragazzi`, `Juniores`, `Assoluti`, `Master`) e rigenera il file cifrato `data/team-data.enc.json`.
+* Fai doppio clic su **`aggiorna-dati.bat`**, scrivi la **nuova password di squadra** e premi Invio.
+* Lo script si collega a `nuotopiemonte-uisp.it`, scarica startlist, risultati ufficiali e staffette per `Dinamica Sport s.s.d. a r.l.`, aggiorna le categorie (`Esordienti B`, `Esordienti A`, `Ragazzi`, `Juniores`, `Assoluti`, `Master`) e rigenera il file cifrato `data/team-data.enc.json`.
+* Per inviare online gli aggiornamenti fatti sul PC, fai doppio clic su **`pubblica-su-github.bat`**.
 
 ---
 
@@ -44,6 +44,6 @@ Con un account **GitHub gratuito**:
 
 Se vuoi aggiungere tempi di gare fuori dal portale UISP o di stagioni passate:
 
-* **In locale su PC:** copia `data/manual_results.sample.csv` in `data/manual_results.csv`, aggiungi le righe (anche usando il generatore nella scheda **Strumenti Coach** della web app) e lancia **`aggiorna-dati.bat`**.
+* **In locale su PC:** copia `data/manual_results.sample.csv` in `data/manual_results.csv`, aggiungi le righe con Excel o Blocco Note, lancia **`aggiorna-dati.bat`** e poi **`pubblica-su-github.bat`**.
 * **Da smartphone (senza PC) con Google Fogli:** crea un Google Sheet con le stesse colonne di `data/manual_results.sample.csv`, fai **File → Condividi → Pubblica sul web → CSV** e salva quell'URL segreto su GitHub in **Settings → Secrets → Actions** come secret **`MANUAL_CSV_URL`**. Ogni volta che aggiorni il foglio dal telefono e lanci il workflow su GitHub, i tempi entrano nell'app cifrata.
 

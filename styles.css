@@ -99,10 +99,7 @@ body {
 .password-wrap input,
 .input-search,
 .select-compact,
-.select-full,
-.manual-form input,
-.manual-form select,
-textarea {
+.select-full {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border);
@@ -861,52 +858,19 @@ textarea:focus {
   color: #5b21b6;
 }
 
-/* RANKING FILTERS & COACH */
+/* RANKING FILTERS */
 .ranking-filters {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 10px;
 }
 
-.field-group label,
-.manual-form label {
+.field-group label {
   display: block;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
   margin-bottom: 4px;
-}
-
-.form-grid-2 {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.csv-output-wrap {
-  margin-top: 12px;
-}
-
-.csv-output-wrap textarea {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  margin: 6px 0 8px;
-}
-
-.coach-text {
-  margin-top: 0;
-  font-size: 14px;
-}
-
-.info-list {
-  padding-left: 18px;
-  font-size: 13.5px;
-  color: var(--text);
-}
-
-.info-list li {
-  margin-bottom: 6px;
 }
 
 .empty-state {
@@ -942,9 +906,6 @@ textarea:focus {
 
 @media (max-width: 560px) {
   .search-row {
-    grid-template-columns: 1fr;
-  }
-  .form-grid-2 {
     grid-template-columns: 1fr;
   }
   .topbar-title {
