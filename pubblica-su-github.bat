@@ -29,3 +29,4 @@ if errorlevel 1 (
   echo Pubblicazione completata! Attendi circa 1 minuto e ricarica il sito su smartphone.
 )
 pause
+
