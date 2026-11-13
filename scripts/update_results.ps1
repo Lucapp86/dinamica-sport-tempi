@@ -144,7 +144,7 @@ function Normalize-CategoryAndGender([string]$MetaText, [string]$RawCategory = "
     }
 
     $cat = "Altro"
-    if ($combined -match '(?i)Esordienti\s*C') { $cat = "Esordienti C" }
+    if ($combined -match '(?i)Esordienti\s*C|Propaganda') { $cat = "Esordienti C/Propaganda" }
     elseif ($combined -match '(?i)Esordienti\s*B') { $cat = "Esordienti B" }
     elseif ($combined -match '(?i)Esordienti\s*A') { $cat = "Esordienti A" }
     elseif ($combined -match '(?i)\bRagazzi\b|Ragazzi/[FM]') { $cat = "Ragazzi" }
@@ -153,7 +153,6 @@ function Normalize-CategoryAndGender([string]$MetaText, [string]$RawCategory = "
     elseif ($combined -match '(?i)\bSeniores\b|Seniores/[FM]') { $cat = "Seniores" }
     elseif ($combined -match '(?i)\bAssoluti\b|Assoluti/[FM]') { $cat = "Assoluti" }
     elseif ($combined -match '(?i)\bMaster') { $cat = "Master" }
-    elseif ($combined -match '(?i)\bPropaganda') { $cat = "Propaganda" }
     elseif (-not [string]::IsNullOrWhiteSpace($RawCategory)) {
         $cat = ($RawCategory -replace '(/[FM]|_[FM])$', '').Trim()
     }
@@ -162,6 +161,24 @@ function Normalize-CategoryAndGender([string]$MetaText, [string]$RawCategory = "
         category = $cat
         gender = $gender
     }
+}
+
+function Get-DefaultCategoryFromAge([int]$BirthYear, [string]$Gender = "M") {
+    if ($BirthYear -ge 2018) { return "Esordienti C/Propaganda" }
+    if ($BirthYear -eq 2017) { return "Esordienti B" }
+    if ($BirthYear -eq 2016) {
+        if ($Gender -eq "F") { return "Esordienti A" } else { return "Esordienti B" }
+    }
+    if ($BirthYear -eq 2015) { return "Esordienti A" }
+    if ($BirthYear -eq 2014) {
+        if ($Gender -eq "F") { return "Ragazzi" } else { return "Esordienti A" }
+    }
+    if ($BirthYear -in @(2012, 2013)) {
+        if ($BirthYear -eq 2012 -and $Gender -eq "F") { return "Juniores" } else { return "Ragazzi" }
+    }
+    if ($BirthYear -in @(2010, 2011)) { return "Juniores" }
+    if ($BirthYear -le 2008) { return "Assoluti" }
+    return "Altro"
 }
 
 function Normalize-EventName([string]$RawEventTitle) {
@@ -545,7 +562,88 @@ function Parse-ManualCsv([string]$CsvText, [string]$DefaultPool, [string]$Defaul
     return $records.ToArray()
 }
 
-function Build-Dataset([object[]]$OfficialResults, [object[]]$ManualResults, [object[]]$StartlistEntries, [object[]]$Relays, [object]$Config, [object[]]$StartlistRelays = @()) {
+function Parse-RosterCsv([string]$CsvText) {
+    $athletes = New-Object System.Collections.Generic.List[object]
+    $lines = @($CsvText -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and -not $_.TrimStart().StartsWith('#') })
+    if ($lines.Count -lt 2) { return @() }
+
+    $delim = if (($lines[0] -split ';').Count -ge ($lines[0] -split ',').Count) { ';' } else { ',' }
+    $rows = ($lines -join "`n") | ConvertFrom-Csv -Delimiter $delim
+    foreach ($r in $rows) {
+        $props = @{}
+        foreach ($p in $r.PSObject.Properties) {
+            $props[(Normalize-Key $p.Name)] = if ($null -ne $p.Value) { ([string]$p.Value).Trim() } else { "" }
+        }
+        $name = ""
+        if ($props.ContainsKey("atleta") -and $props["atleta"]) {
+            $name = $props["atleta"]
+        } elseif ($props.ContainsKey("cognome") -and $props.ContainsKey("nome")) {
+            $name = "$($props['cognome']) $($props['nome'])".Trim()
+        } elseif ($props.ContainsKey("nominativo") -and $props["nominativo"]) {
+            $name = $props["nominativo"]
+        }
+        if (-not $name) { continue }
+
+        $gender = ""
+        foreach ($k in @("sesso", "sex", "gender", "m f")) {
+            if ($props.ContainsKey($k) -and $props[$k]) {
+                $g = $props[$k].ToUpperInvariant()
+                if ($g -in @("M", "MASCHIO", "MASCHILE")) { $gender = "M"; break }
+                if ($g -in @("F", "FEMMINA", "FEMMINILE")) { $gender = "F"; break }
+            }
+        }
+
+        $birthYear = $null
+        foreach ($k in @("anno", "anno nascita", "anno di nascita")) {
+            if ($props.ContainsKey($k) -and $props[$k] -match '^\d{4}$') {
+                $birthYear = [int]$props[$k]
+                break
+            }
+        }
+        if (-not $birthYear) {
+            foreach ($k in @("data nascita", "data di nascita", "nascita")) {
+                if ($props.ContainsKey($k) -and $props[$k] -match '(\d{4})') {
+                    $birthYear = [int]$Matches[1]
+                    break
+                }
+            }
+        }
+
+        $tessera = ""
+        foreach ($k in @("n tessera", "tessera", "codice tessera", "tessera uisp")) {
+            if ($props.ContainsKey($k) -and $props[$k]) {
+                $t = $props[$k]
+                if ($t -notin @("-", [string][char]0x2014, "N.D.")) { $tessera = $t; break }
+            }
+        }
+
+        $cat = ""
+        foreach ($k in @("categoria", "cat")) {
+            if ($props.ContainsKey($k) -and $props[$k]) {
+                $catInfo = Normalize-CategoryAndGender "" $props[$k] $gender
+                $cat = $catInfo.category
+                break
+            }
+        }
+        if (-not $cat -or $cat -eq "Altro") {
+            if ($birthYear) {
+                $cat = Get-DefaultCategoryFromAge $birthYear $gender
+            }
+        }
+
+        [void]$athletes.Add([pscustomobject]@{
+            athleteRaw = $name
+            athleteName = Format-TitleCase $name
+            birthYear = $birthYear
+            gender = $gender
+            tessera = $tessera
+            category = $cat
+        })
+    }
+    return $athletes.ToArray()
+}
+
+function Build-Dataset([object[]]$OfficialResults, [object[]]$ManualResults, [object[]]$StartlistEntries, [object[]]$Relays, [object]$Config, [object[]]$StartlistRelays = @(), [object[]]$RosterAthletes = @()) {
     $allResults = New-Object System.Collections.Generic.List[object]
     $seenResultKeys = New-Object System.Collections.Generic.HashSet[string]
     $allOfficialRelays = New-Object System.Collections.Generic.List[object]
@@ -567,7 +665,7 @@ function Build-Dataset([object[]]$OfficialResults, [object[]]$ManualResults, [ob
         }
     }
 
-    # Costruisce anagrafica atleti unificata (da risultati ufficiali + manuali + startlist)
+    # Costruisce anagrafica atleti unificata (da risultati ufficiali + manuali + startlist + tesserati)
     $athletesByKey = @{}
     $tesseraToKey = @{}
     $nameYearToKey = @{}
@@ -587,6 +685,7 @@ function Build-Dataset([object[]]$OfficialResults, [object[]]$ManualResults, [ob
     $registerAthlete = {
         param($rec)
         $key = & $resolveAthleteKey $rec
+        $recDate = if ($null -ne $rec.PSObject.Properties["date"] -and $rec.date) { [string]$rec.date } else { "" }
         if (-not $athletesByKey.ContainsKey($key)) {
             $athletesByKey[$key] = [ordered]@{
                 id = $key
@@ -595,7 +694,7 @@ function Build-Dataset([object[]]$OfficialResults, [object[]]$ManualResults, [ob
                 tessera = $rec.tessera
                 gender = $rec.gender
                 category = $rec.category
-                _categoryDate = $rec.date
+                _categoryDate = $recDate
             }
         } else {
             $a = $athletesByKey[$key]
@@ -604,13 +703,13 @@ function Build-Dataset([object[]]$OfficialResults, [object[]]$ManualResults, [ob
             if (-not $a.gender -and $rec.gender -and $rec.gender -ne "Mista") { $a.gender = $rec.gender }
             # Aggiorna categoria se la data e piu recente; a parita di data (stessa gara) preferisci la categoria di fascia d'eta rispetto ad Assoluti
             if ($rec.category -and $rec.category -ne "Altro") {
-                if ($a.category -eq "Altro") {
+                if (-not $a.category -or $a.category -eq "Altro") {
                     $a.category = $rec.category
-                    $a._categoryDate = $rec.date
-                } elseif ($rec.date -gt $a._categoryDate) {
+                    $a._categoryDate = $recDate
+                } elseif ($recDate -and $recDate -gt $a._categoryDate) {
                     $a.category = $rec.category
-                    $a._categoryDate = $rec.date
-                } elseif ($rec.date -eq $a._categoryDate -and $a.category -eq "Assoluti" -and $rec.category -ne "Assoluti") {
+                    $a._categoryDate = $recDate
+                } elseif ($recDate -and $recDate -eq $a._categoryDate -and $a.category -eq "Assoluti" -and $rec.category -ne "Assoluti") {
                     $a.category = $rec.category
                 }
             }
@@ -659,6 +758,12 @@ function Build-Dataset([object[]]$OfficialResults, [object[]]$ManualResults, [ob
             entryTime = $e.time
             entryTimeCs = $e.timeCs
         })
+    }
+
+    # Registra tutti i tesserati (anche se non ancora iscritti a gare)
+    foreach ($ra in @($RosterAthletes)) {
+        if ($null -eq $ra) { continue }
+        [void](& $registerAthlete $ra)
     }
 
     $catOrder = @($Config.categoryOrder)
@@ -1012,7 +1117,40 @@ if ($MyInvocation.InvocationName -ne '.') {
         }
     }
 
-    $dataset = Build-Dataset $officialResults.ToArray() $manualResults.ToArray() $startlistEntries.ToArray() $relays.ToArray() $config $startlistRelays.ToArray()
+    # 3c) Anagrafica tesserati da export.csv / roster.csv / atleti.csv
+    $rosterAthletes = New-Object System.Collections.Generic.List[object]
+    $rosterCandidates = @(
+        (Join-Path $dataDir "export.csv"),
+        (Join-Path $rootDir "export.csv")
+    ) + @(Get-ChildItem -Path $dataDir -Filter "*export*.csv" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }) +
+        @(Get-ChildItem -Path $dataDir -Filter "*roster*.csv" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }) +
+        @(Get-ChildItem -Path $dataDir -Filter "*atleti*.csv" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+
+    foreach ($rf in ($rosterCandidates | Select-Object -Unique)) {
+        if ($rf -and (Test-Path $rf)) {
+            Write-Host "Carico anagrafica atleti da $rf..."
+            $rText = Read-Utf8File $rf
+            foreach ($ra in @(Parse-RosterCsv $rText)) {
+                [void]$rosterAthletes.Add($ra)
+            }
+        }
+    }
+
+    # Preserva anagrafica atleti da dataset precedente cifrato (utile su GitHub Actions)
+    if ($existingPlainDataset -and $existingPlainDataset.athletes) {
+        foreach ($ea in @($existingPlainDataset.athletes)) {
+            [void]$rosterAthletes.Add([pscustomobject]@{
+                athleteRaw = $ea.name
+                athleteName = $ea.name
+                birthYear = $ea.birthYear
+                gender = $ea.gender
+                tessera = $ea.tessera
+                category = $ea.category
+            })
+        }
+    }
+
+    $dataset = Build-Dataset $officialResults.ToArray() $manualResults.ToArray() $startlistEntries.ToArray() $relays.ToArray() $config $startlistRelays.ToArray() $rosterAthletes.ToArray()
     $datasetJson = $dataset | ConvertTo-Json -Depth 10 -Compress
 
     if ($PlaintextTestOutput) {

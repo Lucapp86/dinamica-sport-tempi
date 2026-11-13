@@ -157,6 +157,32 @@ try {
 }
 Assert-True "Password errata rifiutata con HMAC" $wrongFailed
 
+# 7. Test anagrafica roster/export e categorie per eta
+Assert-Equal "Age cat 2019 F" (Get-DefaultCategoryFromAge 2019 "F") "Esordienti C/Propaganda"
+Assert-Equal "Age cat 2016 F" (Get-DefaultCategoryFromAge 2016 "F") "Esordienti A"
+Assert-Equal "Age cat 2016 M" (Get-DefaultCategoryFromAge 2016 "M") "Esordienti B"
+Assert-Equal "Age cat 2015 M" (Get-DefaultCategoryFromAge 2015 "M") "Esordienti A"
+Assert-Equal "Age cat 2010 M" (Get-DefaultCategoryFromAge 2010 "M") "Juniores"
+Assert-Equal "Age cat 2000 M" (Get-DefaultCategoryFromAge 2000 "M") "Assoluti"
+
+$sampleRoster = @"
+COGNOME;NOME;SESSO;DATA NASCITA;N. TESSERA
+BOTTANI;FEDERICO;M;18/01/2018;270545035
+MATTIAZZO;ELEONORA;F;05/02/2016;270545040
+"@
+$parsedRoster = Parse-RosterCsv $sampleRoster
+Assert-Equal "Roster count" $parsedRoster.Count 2
+Assert-Equal "Roster 1 name" $parsedRoster[0].athleteName "Bottani Federico"
+Assert-Equal "Roster 1 cat" $parsedRoster[0].category "Esordienti C/Propaganda"
+Assert-Equal "Roster 2 name" $parsedRoster[1].athleteName "Mattiazzo Eleonora"
+Assert-Equal "Roster 2 cat" $parsedRoster[1].category "Esordienti A"
+Assert-Equal "Roster 2 tessera" $parsedRoster[1].tessera "270545040"
+
+$dsWithRoster = Build-Dataset @() @() @() @() $cfg @() $parsedRoster
+Assert-Equal "Dataset with roster athlete count" $dsWithRoster.athletes.Count 2
+Assert-Equal "Dataset with roster results count" $dsWithRoster.results.Count 0
+Assert-Equal "Dataset with roster first athlete cat" $dsWithRoster.athletes[0].category "Esordienti C/Propaganda"
+
 Write-Host ""
 Write-Host ("Risultato test: {0} passati, {1} falliti." -f $script:passed, $script:failed)
 if ($script:failed -gt 0) { exit 1 }

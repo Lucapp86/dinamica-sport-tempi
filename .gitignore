@@ -1,6 +1,9 @@
 # File locali privati (non caricare in chiaro su un repository pubblico GitHub)
 data/manual_results.csv
 data/historical_*.csv
+data/export*.csv
+data/roster*.csv
+data/atleti*.csv
 .env
 *.local.json
 tmp/
