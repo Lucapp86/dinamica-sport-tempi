@@ -333,10 +333,10 @@ function Parse-ClubRankings([string]$Html, [string]$MeetId, [string]$MeetTitle, 
         if (-not $h2M.Success) { continue }
         $title = Clean-HtmlText $h2M.Groups[1].Value
         if ($title -notmatch '(?i)Classifica\s+societ') { continue }
+        if ($title -match '(?i)Master') { continue }
 
         $type = "Generale"
         if ($title -match '(?i)Giovani') { $type = "Giovani" }
-        elseif ($title -match '(?i)Master') { $type = "Master" }
         elseif ($title -match '(?i)Esordienti') { $type = "Esordienti" }
         elseif ($title -match '(?i)Assoluti') { $type = "Assoluti" }
 
@@ -1251,7 +1251,9 @@ if ($MyInvocation.InvocationName -ne '.') {
             }
             if ($null -ne $existingPlainDataset.PSObject.Properties["clubRankings"]) {
                 foreach ($ecr in @($existingPlainDataset.clubRankings)) {
-                    [void]$clubRankings.Add($ecr)
+                    if ($null -ne $ecr -and $ecr.type -ne "Master" -and $ecr.title -notmatch '(?i)Master') {
+                        [void]$clubRankings.Add($ecr)
+                    }
                 }
             }
         } catch {

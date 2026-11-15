@@ -210,18 +210,17 @@ $sampleClubHtml = @"
 </div>
 "@
 
-$parsedClubRankings = Parse-ClubRankings $sampleClubHtml "24" "I TAPPA - TROFEO FILIPPA" "2026-11-15"
-Assert-Equal "Classifiche societa estratte" $parsedClubRankings.Count 2
+$parsedClubRankings = @(Parse-ClubRankings $sampleClubHtml "24" "I TAPPA - TROFEO FILIPPA" "2026-11-15")
+Assert-Equal "Classifiche societa estratte (Master escluso)" $parsedClubRankings.Count 1
 Assert-Equal "Classifica 1 tipo" $parsedClubRankings[0].type "Giovani"
 Assert-Equal "Classifica 1 righe" $parsedClubRankings[0].rows.Count 2
 Assert-Equal "Classifica 1 primo club" $parsedClubRankings[0].rows[0].club "UISP RIVER BORGARO"
 Assert-Equal "Classifica 1 Dinamica pos" $parsedClubRankings[0].rows[1].position "2"
 Assert-Equal "Classifica 1 Dinamica punti trofeo" $parsedClubRankings[0].rows[1].trophyPoints "301"
 Assert-Equal "Classifica 1 Dinamica punti coppa" $parsedClubRankings[0].rows[1].cupPoints "10"
-Assert-Equal "Classifica 2 tipo" $parsedClubRankings[1].type "Master"
 
 $dsWithClub = Build-Dataset @() @() @() @() $cfg @() @() $parsedClubRankings
-Assert-Equal "Dataset con classifiche societa" $dsWithClub.clubRankings.Count 2
+Assert-Equal "Dataset con classifiche societa" $dsWithClub.clubRankings.Count 1
 $clubJson = $dsWithClub | ConvertTo-Json -Depth 10 -Compress
 Assert-True "JSON include array clubRankings" ($clubJson -match '"clubRankings":\[\{')
 

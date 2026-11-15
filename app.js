@@ -1104,9 +1104,15 @@
     return s.includes('dinamica') || s.includes('dinamica sport');
   }
 
-  function renderClubRankingsFilters() {
+  function getFilteredClubRankings() {
     const ds = state.activeDataset;
-    const rankings = ds?.clubRankings || [];
+    return (ds?.clubRankings || []).filter(
+      (r) => !String(r.type || '').toLowerCase().includes('master') && !String(r.title || '').toLowerCase().includes('master')
+    );
+  }
+
+  function renderClubRankingsFilters() {
+    const rankings = getFilteredClubRankings();
     if (rankings.length === 0) {
       els.clubRankingMeetSelect.innerHTML = '<option value="">Nessuna manifestazione</option>';
       els.clubRankingTypeSelect.innerHTML = '<option value="ALL">Tutti i settori</option>';
@@ -1135,8 +1141,7 @@
   }
 
   function renderClubRankingsTypeFilter() {
-    const ds = state.activeDataset;
-    const rankings = ds?.clubRankings || [];
+    const rankings = getFilteredClubRankings();
     const currentMeetId = String(els.clubRankingMeetSelect.value || '');
     const meetRankings = rankings.filter((r) => !currentMeetId || String(r.meetId) === currentMeetId);
     const types = Array.from(new Set(meetRankings.map((r) => r.type || 'Generale')));
@@ -1155,8 +1160,7 @@
   }
 
   function renderClubRankingsView() {
-    const ds = state.activeDataset;
-    const rankings = ds?.clubRankings || [];
+    const rankings = getFilteredClubRankings();
     const currentMeetId = String(els.clubRankingMeetSelect.value || '');
     const currentType = els.clubRankingTypeSelect.value || 'ALL';
 
@@ -1250,7 +1254,7 @@
         }
 
         const clubHtml = isOur
-          ? `<strong>${escapeHtml(row.club)}</strong> <span class="club-tag-our">Dinamica</span>`
+          ? `<strong>${escapeHtml(row.club)}</strong>`
           : escapeHtml(row.club);
 
         const trophyBadge = row.trophyPoints
