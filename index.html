@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" href="Logo%20tondo.png">
   <link rel="apple-touch-icon" href="Logo%20tondo.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css?v=20261112d">
+  <link rel="stylesheet" href="styles.css?v=20261115b">
 </head>
 <body>
   <!-- SCHERMATA DI ACCESSO CON PASSWORD SQUADRA -->
@@ -89,6 +89,9 @@
         </button>
         <button type="button" class="nav-tab" data-view="ranking">
           Classifica PB
+        </button>
+        <button type="button" class="nav-tab" data-view="club-rankings">
+          Classifiche Società
         </button>
       </nav>
 
@@ -251,10 +254,36 @@
           <div id="ranking-table-wrap" class="table-wrap"></div>
         </div>
       </section>
+
+      <!-- VISTA 4: CLASSIFICHE SOCIETÀ & PUNTI TROFEO -->
+      <section id="view-club-rankings" class="view-panel hidden">
+        <div class="filters-card">
+          <div class="ranking-filters club-ranking-filters">
+            <div class="field-group">
+              <label for="club-ranking-meet-select">Manifestazione / Trofeo</label>
+              <select id="club-ranking-meet-select" class="select-full"></select>
+            </div>
+            <div class="field-group">
+              <label for="club-ranking-type-select">Settore / Categoria</label>
+              <select id="club-ranking-type-select" class="select-full"></select>
+            </div>
+          </div>
+        </div>
+
+        <div id="club-ranking-highlight" class="club-hero-card hidden"></div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 id="club-ranking-table-title">Classifica Società</h2>
+            <span id="club-ranking-meta-label" class="muted-small"></span>
+          </div>
+          <div id="club-ranking-table-wrap" class="table-wrap"></div>
+        </div>
+      </section>
     </main>
   </div>
 
-  <script src="app.js?v=20261112d"></script>
+  <script src="app.js?v=20261115b"></script>
 </body>
 </html>
 

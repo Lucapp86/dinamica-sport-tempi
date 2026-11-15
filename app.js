@@ -69,7 +69,14 @@
     rankGenderSelect: document.getElementById('rank-gender-select'),
     rankPoolSelect: document.getElementById('rank-pool-select'),
     rankCountLabel: document.getElementById('rank-count-label'),
-    rankingTableWrap: document.getElementById('ranking-table-wrap')
+    rankingTableWrap: document.getElementById('ranking-table-wrap'),
+    viewClubRankings: document.getElementById('view-club-rankings'),
+    clubRankingMeetSelect: document.getElementById('club-ranking-meet-select'),
+    clubRankingTypeSelect: document.getElementById('club-ranking-type-select'),
+    clubRankingHighlight: document.getElementById('club-ranking-highlight'),
+    clubRankingTableTitle: document.getElementById('club-ranking-table-title'),
+    clubRankingMetaLabel: document.getElementById('club-ranking-meta-label'),
+    clubRankingTableWrap: document.getElementById('club-ranking-table-wrap')
   };
 
   /* ==================== UTILITY FORMATTING ==================== */
@@ -346,6 +353,8 @@
     renderRelaysView();
     renderRankingFilters();
     renderRankingView();
+    renderClubRankingsFilters();
+    renderClubRankingsView();
 
     if (state.currentView === 'detail' && state.selectedAthleteId) {
       renderAthleteDetail(state.selectedAthleteId);
@@ -359,6 +368,7 @@
     els.viewDetail.classList.toggle('hidden', viewName !== 'detail');
     els.viewRelays.classList.toggle('hidden', viewName !== 'relays');
     els.viewRanking.classList.toggle('hidden', viewName !== 'ranking');
+    els.viewClubRankings.classList.toggle('hidden', viewName !== 'club-rankings');
 
     els.navTabs.forEach((tab) => {
       const target = tab.dataset.view;
@@ -1086,6 +1096,191 @@
     });
   }
 
+  /* ==================== CLASSIFICHE SOCIETÀ ==================== */
+
+  function isOurClub(clubName) {
+    if (!clubName) return false;
+    const s = clubName.toLowerCase();
+    return s.includes('dinamica') || s.includes('dinamica sport');
+  }
+
+  function renderClubRankingsFilters() {
+    const ds = state.activeDataset;
+    const rankings = ds?.clubRankings || [];
+    if (rankings.length === 0) {
+      els.clubRankingMeetSelect.innerHTML = '<option value="">Nessuna manifestazione</option>';
+      els.clubRankingTypeSelect.innerHTML = '<option value="ALL">Tutti i settori</option>';
+      return;
+    }
+
+    const meetMap = new Map();
+    for (const r of rankings) {
+      if (!meetMap.has(r.meetId)) {
+        meetMap.set(r.meetId, { meetId: r.meetId, meet: r.meet, date: r.date });
+      }
+    }
+    const meets = Array.from(meetMap.values()).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+    const prevMeet = els.clubRankingMeetSelect.value;
+    els.clubRankingMeetSelect.innerHTML = meets
+      .map((m) => `<option value="${escapeHtml(m.meetId)}" ${m.meetId === prevMeet ? 'selected' : ''}>${escapeHtml(m.meet)}</option>`)
+      .join('');
+
+    renderClubRankingsTypeFilter();
+  }
+
+  function renderClubRankingsTypeFilter() {
+    const ds = state.activeDataset;
+    const rankings = ds?.clubRankings || [];
+    const currentMeetId = els.clubRankingMeetSelect.value;
+    const meetRankings = rankings.filter((r) => !currentMeetId || r.meetId === currentMeetId);
+    const types = Array.from(new Set(meetRankings.map((r) => r.type || 'Generale')));
+
+    const prevType = els.clubRankingTypeSelect.value || 'ALL';
+    if (types.length > 1) {
+      els.clubRankingTypeSelect.innerHTML = [
+        `<option value="ALL" ${prevType === 'ALL' ? 'selected' : ''}>Tutti i settori (${types.join(', ')})</option>`,
+        ...types.map((t) => `<option value="${escapeHtml(t)}" ${t === prevType ? 'selected' : ''}>${escapeHtml(t)}</option>`)
+      ].join('');
+    } else if (types.length === 1) {
+      els.clubRankingTypeSelect.innerHTML = `<option value="${escapeHtml(types[0])}">${escapeHtml(types[0])}</option>`;
+    } else {
+      els.clubRankingTypeSelect.innerHTML = '<option value="ALL">Tutti i settori</option>';
+    }
+  }
+
+  function renderClubRankingsView() {
+    const ds = state.activeDataset;
+    const rankings = ds?.clubRankings || [];
+    const currentMeetId = els.clubRankingMeetSelect.value;
+    const currentType = els.clubRankingTypeSelect.value || 'ALL';
+
+    let matches = rankings.filter((r) => !currentMeetId || r.meetId === currentMeetId);
+    if (currentType !== 'ALL') {
+      matches = matches.filter((r) => r.type === currentType);
+    }
+
+    if (matches.length === 0) {
+      els.clubRankingHighlight.classList.add('hidden');
+      els.clubRankingTableTitle.textContent = 'Classifica Società';
+      els.clubRankingMetaLabel.textContent = '0 società';
+      els.clubRankingTableWrap.innerHTML = '<div class="empty-state">Nessuna classifica societaria disponibile al momento per questa manifestazione.</div>';
+      return;
+    }
+
+    let ourHighlight = null;
+    for (const rk of matches) {
+      for (const row of (rk.rows || [])) {
+        if (isOurClub(row.club)) {
+          ourHighlight = { ranking: rk, row };
+          break;
+        }
+      }
+      if (ourHighlight) break;
+    }
+
+    if (ourHighlight) {
+      const pos = String(ourHighlight.row.position);
+      let badgeText = `${pos}° Posto`;
+      let valText = `${pos}°`;
+      if (pos === '1') { badgeText = '🥇 1° Posto'; valText = '🥇 1°'; }
+      else if (pos === '2') { badgeText = '🥈 2° Posto'; valText = '🥈 2°'; }
+      else if (pos === '3') { badgeText = '🥉 3° Posto'; valText = '🥉 3°'; }
+
+      els.clubRankingHighlight.innerHTML = `
+        <div class="club-hero-top">
+          <div>
+            <div class="club-hero-title">Dinamica Sport · ${escapeHtml(ourHighlight.ranking.meet)}</div>
+            <div class="club-hero-sub">${escapeHtml(ourHighlight.ranking.title)} · Fonte ufficiale UISP</div>
+          </div>
+          <div class="club-hero-badge">${badgeText}</div>
+        </div>
+        <div class="club-kpi-strip">
+          <div class="club-kpi-box">
+            <div class="club-kpi-val">${valText}</div>
+            <div class="club-kpi-lbl">Posizione Dinamica</div>
+          </div>
+          <div class="club-kpi-box">
+            <div class="club-kpi-val">${escapeHtml(ourHighlight.row.trophyPoints || '0')}</div>
+            <div class="club-kpi-lbl">Punti Trofeo</div>
+          </div>
+          <div class="club-kpi-box">
+            <div class="club-kpi-val">${escapeHtml(ourHighlight.row.cupPoints || '0')}</div>
+            <div class="club-kpi-lbl">Punti Coppa</div>
+          </div>
+        </div>
+      `;
+      els.clubRankingHighlight.classList.remove('hidden');
+    } else {
+      els.clubRankingHighlight.classList.add('hidden');
+    }
+
+    const primaryTitle = matches.length === 1 ? matches[0].title : 'Classifiche Società per Settore';
+    els.clubRankingTableTitle.textContent = primaryTitle;
+
+    const totalClubs = matches.reduce((acc, m) => acc + (m.rows || []).length, 0);
+    els.clubRankingMetaLabel.textContent = `${totalClubs} societ${totalClubs === 1 ? 'à' : 'à'} in classifica`;
+
+    const tablesHtml = matches.map((rk) => {
+      const sectionHeader = matches.length > 1
+        ? `<div style="padding: 12px 14px 6px; font-weight: 700; font-size: 15px; color: var(--primary-dark);">${escapeHtml(rk.title)}</div>`
+        : '';
+
+      const rows = (rk.rows || []).map((row) => {
+        const isOur = isOurClub(row.club);
+        const pos = String(row.position);
+        let posBadge = `<strong>#${escapeHtml(pos)}</strong>`;
+        if (pos === '1') {
+          posBadge = '<span class="podium-pill podium-1">🥇 1</span>';
+        } else if (pos === '2') {
+          posBadge = '<span class="podium-pill podium-2">🥈 2</span>';
+        } else if (pos === '3') {
+          posBadge = '<span class="podium-pill podium-3">🥉 3</span>';
+        }
+
+        const clubHtml = isOur
+          ? `<strong>${escapeHtml(row.club)}</strong> <span class="club-tag-our">Dinamica</span>`
+          : escapeHtml(row.club);
+
+        const trophyBadge = row.trophyPoints
+          ? `<span class="points-pill ${isOur ? 'points-pill-highlight' : ''}">${escapeHtml(row.trophyPoints)}</span>`
+          : '—';
+
+        const cupBadge = row.cupPoints
+          ? `<span class="points-pill ${isOur ? 'points-pill-highlight' : ''}">${escapeHtml(row.cupPoints)}</span>`
+          : '—';
+
+        return `
+          <tr class="${isOur ? 'row-our-club' : ''}">
+            <td>${posBadge}</td>
+            <td>${clubHtml}</td>
+            <td>${trophyBadge}</td>
+            <td>${cupBadge}</td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        ${sectionHeader}
+        <table class="data-table" style="margin-bottom: 16px;">
+          <thead>
+            <tr>
+              <th style="width: 70px;">Pos.</th>
+              <th>Società</th>
+              <th style="width: 120px;">Punti Trofeo</th>
+              <th style="width: 120px;">Punti Coppa</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      `;
+    }).join('');
+
+    els.clubRankingTableWrap.innerHTML = tablesHtml;
+  }
+
   /* ==================== AUTH & INIT ==================== */
 
   function savePassword(pw) {
@@ -1213,6 +1408,13 @@
     [els.rankEventSelect, els.rankCategorySelect, els.rankGenderSelect, els.rankPoolSelect].forEach((sel) => {
       sel.addEventListener('change', renderRankingView);
     });
+
+    els.clubRankingMeetSelect.addEventListener('change', () => {
+      renderClubRankingsTypeFilter();
+      renderClubRankingsView();
+    });
+
+    els.clubRankingTypeSelect.addEventListener('change', renderClubRankingsView);
   }
 
   async function init() {

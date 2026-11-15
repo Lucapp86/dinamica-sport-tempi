@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Aggiorna i dati della squadra Dinamica Sport da nuotopiemonte-uisp.it e da eventuali CSV manuali,
     calcola categorie/tempi/PB e genera il file cifrato data/team-data.enc.json per la Web App.
@@ -321,18 +321,69 @@ function Discover-MeetPages([string]$BaseUrl, [string]$AreaHtml, [string]$Target
     }
 }
 
+function Parse-ClubRankings([string]$Html, [string]$MeetId, [string]$MeetTitle, [string]$MeetDate) {
+    $rankings = New-Object System.Collections.Generic.List[object]
+    if ([string]::IsNullOrWhiteSpace($Html)) { return @() }
+
+    $cardMatches = [regex]::Matches($Html, '<div[^>]*class="[^"]*slm-card[^"]*"[^>]*>(.*?)</div>\s*(?=(?:<div[^>]*class="[^"]*slm-card[^"]*"|$))', 'Singleline')
+    foreach ($cm in $cardMatches) {
+        $cHtml = $cm.Groups[1].Value
+        $h2M = [regex]::Match($cHtml, '<h2[^>]*>(.*?)</h2>', 'Singleline')
+        if (-not $h2M.Success) { continue }
+        $title = Clean-HtmlText $h2M.Groups[1].Value
+        if ($title -notmatch '(?i)Classifica societ[aà]') { continue }
+
+        $type = "Generale"
+        if ($title -match '(?i)Giovani') { $type = "Giovani" }
+        elseif ($title -match '(?i)Master') { $type = "Master" }
+        elseif ($title -match '(?i)Esordienti') { $type = "Esordienti" }
+        elseif ($title -match '(?i)Assoluti') { $type = "Assoluti" }
+
+        $tableM = [regex]::Match($cHtml, '<table[^>]*class="[^"]*slm-table[^"]*"[^>]*>(.*?)</table>', 'Singleline')
+        if (-not $tableM.Success) { continue }
+        $tHtml = $tableM.Groups[1].Value
+
+        $rowMatches = [regex]::Matches($tHtml, '<tr[^>]*>(.*?)</tr>', 'Singleline')
+        $rows = New-Object System.Collections.Generic.List[object]
+        foreach ($rm in $rowMatches) {
+            $rHtml = $rm.Groups[1].Value
+            $tdMatches = [regex]::Matches($rHtml, '<td[^>]*>(.*?)</td>', 'Singleline')
+            if ($tdMatches.Count -lt 2) { continue }
+            $cells = @($tdMatches | ForEach-Object { Clean-HtmlText $_.Groups[1].Value })
+
+            $pos = if ($cells.Count -ge 1) { $cells[0] } else { "" }
+            $club = if ($cells.Count -ge 2) { $cells[1] } else { "" }
+            $trophyPoints = if ($cells.Count -ge 3) { $cells[2] } else { "" }
+            $cupPoints = if ($cells.Count -ge 4) { $cells[3] } else { "" }
+
+            if (-not $club) { continue }
+
+            [void]$rows.Add([ordered]@{
+                position = $pos
+                club = $club
+                trophyPoints = $trophyPoints
+                cupPoints = $cupPoints
+            })
+        }
+
+        if ($rows.Count -gt 0) {
+            [void]$rankings.Add([ordered]@{
+                meetId = $MeetId
+                meet = $MeetTitle
+                date = $MeetDate
+                title = $title
+                type = $type
+                rows = [object[]]$rows.ToArray()
+            })
+        }
+    }
+    return [object[]]$rankings.ToArray()
+}
+
 function Parse-SlmPage([string]$Html, [string]$SourceType, [string]$ClubRegex, [string]$DefaultPool, [hashtable]$MeetMetaById, [string]$PageUrl) {
     $records = New-Object System.Collections.Generic.List[object]
     $relays = New-Object System.Collections.Generic.List[object]
-
-    $sections = @([regex]::Matches($Html, '<(?:details|section)[^>]*class="[^"]*slm-public-event[^"]*"[^>]*>(.*?)</(?:details|section)>', 'Singleline') | ForEach-Object { $_.Groups[1].Value })
-    if ($sections.Count -eq 0 -and $Html -match '<table[^>]*class="[^"]*slm-(?:table|public-ranking|ranking)') {
-        $chunks = [regex]::Split($Html, '(?=<div[^>]*class="[^"]*slm-event-title[^"]*"|<details[^>]*class="[^"]*slm-public-event[^"]*")')
-        $sections = @($chunks | Where-Object { $_ -match '<table[^>]*class="[^"]*slm-(?:table|public-ranking|ranking)' -and $_ -notmatch '<p class="slm-eyebrow">Manifestazione</p>' })
-    }
-    if ($sections.Count -eq 0) {
-        return [pscustomobject]@{ Records = @(); Relays = @() }
-    }
+    $clubRankings = New-Object System.Collections.Generic.List[object]
 
     $meetId = ""
     if ($PageUrl -match 'meet_id=(\d+)') { $meetId = $Matches[1] }
@@ -358,9 +409,24 @@ function Parse-SlmPage([string]$Html, [string]$SourceType, [string]$ClubRegex, [
 
     if ($meetId -and $MeetMetaById.ContainsKey($meetId)) {
         $mm = $MeetMetaById[$meetId]
-        if (-not $meetTitle) { $meetTitle = $mm.title }
-        if (-not $meetDate) { $meetDate = $mm.date }
-        if (-not $meetCity) { $meetCity = $mm.city }
+        if (-not $meetTitle -and $mm.Title) { $meetTitle = $mm.Title }
+        if (-not $meetDate -and $mm.Date) { $meetDate = $mm.Date }
+        if (-not $meetCity -and $mm.City) { $meetCity = $mm.City }
+    }
+
+    if ($SourceType -eq "official") {
+        foreach ($cr in @(Parse-ClubRankings $Html $meetId $meetTitle $meetDate)) {
+            [void]$clubRankings.Add($cr)
+        }
+    }
+
+    $sections = @([regex]::Matches($Html, '<(?:details|section)[^>]*class="[^"]*slm-public-event[^"]*"[^>]*>(.*?)</(?:details|section)>', 'Singleline') | ForEach-Object { $_.Groups[1].Value })
+    if ($sections.Count -eq 0 -and $Html -match '<table[^>]*class="[^"]*slm-(?:table|public-ranking|ranking)') {
+        $chunks = [regex]::Split($Html, '(?=<div[^>]*class="[^"]*slm-event-title[^"]*"|<details[^>]*class="[^"]*slm-public-event[^"]*")')
+        $sections = @($chunks | Where-Object { $_ -match '<table[^>]*class="[^"]*slm-(?:table|public-ranking|ranking)' -and $_ -notmatch '<p class="slm-eyebrow">Manifestazione</p>' -and $_ -notmatch '(?i)Classifica societ[aà]' })
+    }
+    if ($sections.Count -eq 0) {
+        return [pscustomobject]@{ Records = @(); Relays = @(); ClubRankings = [object[]]$clubRankings.ToArray() }
     }
 
     $isLive = ($Html -match '(?i)provvisori|risultati\s+live') -and ($Html -notmatch '(?i)risultati\s+ufficiali\s+pubblicati')
@@ -548,6 +614,7 @@ function Parse-SlmPage([string]$Html, [string]$SourceType, [string]$ClubRegex, [
     return [pscustomobject]@{
         Records = [object[]]$records.ToArray()
         Relays = [object[]]$relays.ToArray()
+        ClubRankings = [object[]]$clubRankings.ToArray()
     }
 }
 
@@ -687,7 +754,16 @@ function Parse-RosterCsv([string]$CsvText) {
     return $athletes.ToArray()
 }
 
-function Build-Dataset([object[]]$OfficialResults, [object[]]$ManualResults, [object[]]$StartlistEntries, [object[]]$Relays, [object]$Config, [object[]]$StartlistRelays = @(), [object[]]$RosterAthletes = @()) {
+function Build-Dataset(
+    [object[]]$OfficialResults,
+    [object[]]$ManualResults,
+    [object[]]$StartlistEntries,
+    [object[]]$Relays,
+    [object]$Config,
+    [object[]]$StartlistRelays = @(),
+    [object[]]$RosterAthletes = @(),
+    [object[]]$ClubRankings = @()
+) {
     $allResults = New-Object System.Collections.Generic.List[object]
     $seenResultKeys = New-Object System.Collections.Generic.HashSet[string]
     $allOfficialRelays = New-Object System.Collections.Generic.List[object]
@@ -876,6 +952,16 @@ function Build-Dataset([object[]]$OfficialResults, [object[]]$ManualResults, [ob
     $sortedRelays = [object[]]@((& $normalizeRelayList $allOfficialRelays.ToArray() $false) | Sort-Object date, event, category)
     $sortedRelayEntries = [object[]]@((& $normalizeRelayList $StartlistRelays $true) | Sort-Object date, event, category)
 
+    $seenClubRankingKeys = New-Object System.Collections.Generic.HashSet[string]
+    $sortedClubRankings = New-Object System.Collections.Generic.List[object]
+    foreach ($cr in @($ClubRankings)) {
+        if ($null -eq $cr) { continue }
+        $crKey = "{0}|{1}" -f $cr.meetId, $cr.type
+        if ($seenClubRankingKeys.Add($crKey)) {
+            [void]$sortedClubRankings.Add($cr)
+        }
+    }
+
     return [ordered]@{
         clubName = $Config.clubName
         sourceBaseUrl = $Config.sourceBaseUrl
@@ -886,6 +972,7 @@ function Build-Dataset([object[]]$OfficialResults, [object[]]$ManualResults, [ob
         entries = $sortedEntries
         relays = $sortedRelays
         relayEntries = $sortedRelayEntries
+        clubRankings = [object[]]$sortedClubRankings.ToArray()
     }
 }
 
@@ -1018,6 +1105,7 @@ function Decrypt-DatasetJson([object]$Envelope, [string]$Passphrase) {
 
 function Get-DatasetFingerprint([object]$Dataset) {
     $relayEntries = if ($null -ne $Dataset.PSObject.Properties["relayEntries"]) { $Dataset.relayEntries } else { @() }
+    $clubRankings = if ($null -ne $Dataset.PSObject.Properties["clubRankings"]) { $Dataset.clubRankings } else { @() }
     $core = [ordered]@{
         clubName = $Dataset.clubName
         athletes = $Dataset.athletes
@@ -1025,6 +1113,7 @@ function Get-DatasetFingerprint([object]$Dataset) {
         entries = $Dataset.entries
         relays = $Dataset.relays
         relayEntries = $relayEntries
+        clubRankings = $clubRankings
     }
     return ($core | ConvertTo-Json -Depth 10 -Compress)
 }
@@ -1040,6 +1129,7 @@ if ($MyInvocation.InvocationName -ne '.') {
     $relays = New-Object System.Collections.Generic.List[object]
     $startlistRelays = New-Object System.Collections.Generic.List[object]
     $manualResults = New-Object System.Collections.Generic.List[object]
+    $clubRankings = New-Object System.Collections.Generic.List[object]
 
     if (-not $SkipRemote) {
         Write-Host "Scarico indice manifestazioni da $baseUrl..."
@@ -1052,6 +1142,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         $resParsedHome = Parse-SlmPage $resultsIndexHtml "official" $clubRegex $config.defaultPoolLength $resDiscovery.MeetMeta "$baseUrl$($config.resultsPath)"
         foreach ($r in $resParsedHome.Records) { [void]$officialResults.Add($r) }
         foreach ($rel in $resParsedHome.Relays) { [void]$relays.Add($rel) }
+        foreach ($cr in $resParsedHome.ClubRankings) { [void]$clubRankings.Add($cr) }
 
         foreach ($u in $resDiscovery.Urls) {
             try {
@@ -1059,6 +1150,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                 $parsed = Parse-SlmPage $html "official" $clubRegex $config.defaultPoolLength $resDiscovery.MeetMeta $u
                 foreach ($r in $parsed.Records) { [void]$officialResults.Add($r) }
                 foreach ($rel in $parsed.Relays) { [void]$relays.Add($rel) }
+                foreach ($cr in $parsed.ClubRankings) { [void]$clubRankings.Add($cr) }
             } catch {
                 Write-Warning "Impossibile leggere pagina risultati $u : $($_.Exception.Message)"
             }
@@ -1156,6 +1248,11 @@ if ($MyInvocation.InvocationName -ne '.') {
                     }
                 }
             }
+            if ($null -ne $existingPlainDataset.PSObject.Properties["clubRankings"]) {
+                foreach ($ecr in @($existingPlainDataset.clubRankings)) {
+                    [void]$clubRankings.Add($ecr)
+                }
+            }
         } catch {
             $existingPlainDataset = $null
         }
@@ -1194,7 +1291,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         }
     }
 
-    $dataset = Build-Dataset $officialResults.ToArray() $manualResults.ToArray() $startlistEntries.ToArray() $relays.ToArray() $config $startlistRelays.ToArray() $rosterAthletes.ToArray()
+    $dataset = Build-Dataset $officialResults.ToArray() $manualResults.ToArray() $startlistEntries.ToArray() $relays.ToArray() $config $startlistRelays.ToArray() $rosterAthletes.ToArray() $clubRankings.ToArray()
     $datasetJson = $dataset | ConvertTo-Json -Depth 10 -Compress
 
     if ($PlaintextTestOutput) {
@@ -1209,11 +1306,11 @@ if ($MyInvocation.InvocationName -ne '.') {
     }
 
     if ($skipWrite) {
-        Write-Host ("Nessuna modifica rispetto ai dati gia salvati (Atleti: {0} | Risultati: {1} | Iscrizioni: {2})." -f $dataset.athletes.Count, $dataset.results.Count, $dataset.entries.Count)
+        Write-Host ("Nessuna modifica rispetto ai dati gia salvati (Atleti: {0} | Risultati: {1} | Iscrizioni: {2} | Classifiche società: {3})." -f $dataset.athletes.Count, $dataset.results.Count, $dataset.entries.Count, $dataset.clubRankings.Count)
     } else {
         $encryptedEnvelope = Encrypt-DatasetJson $datasetJson $Password
         $envelopeJson = $encryptedEnvelope | ConvertTo-Json -Depth 5
         Write-Utf8File $OutputPath $envelopeJson
-        Write-Host ("Completato! Atleti: {0} | Risultati: {1} | Staffette: {2} | Iscrizioni: {3} | Staffette startlist: {4} -> {5}" -f $dataset.athletes.Count, $dataset.results.Count, $dataset.relays.Count, $dataset.entries.Count, $dataset.relayEntries.Count, $OutputPath)
+        Write-Host ("Completato! Atleti: {0} | Risultati: {1} | Staffette: {2} | Iscrizioni: {3} | Staffette startlist: {4} | Classifiche società: {5} -> {6}" -f $dataset.athletes.Count, $dataset.results.Count, $dataset.relays.Count, $dataset.entries.Count, $dataset.relayEntries.Count, $dataset.clubRankings.Count, $OutputPath)
     }
 }

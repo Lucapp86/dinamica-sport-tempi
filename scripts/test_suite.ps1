@@ -183,6 +183,48 @@ Assert-Equal "Dataset with roster athlete count" $dsWithRoster.athletes.Count 2
 Assert-Equal "Dataset with roster results count" $dsWithRoster.results.Count 0
 Assert-Equal "Dataset with roster first athlete cat" $dsWithRoster.athletes[0].category "Esordienti C/Propaganda"
 
+# 8. Test parsing classifiche societarie e integrazione in Build-Dataset
+$sampleClubHtml = @"
+<div class="slm-card">
+  <h2>Classifica societ$([char]0x00E0) Giovani (provvisoria)</h2>
+  <table class="slm-table slm-ranking">
+    <thead>
+      <tr><th>Pos.</th><th>Societ$([char]0x00E0)</th><th>Punti Trofeo</th><th>Punti Coppa</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td>UISP RIVER BORGARO</td><td>374</td><td>12</td></tr>
+      <tr><td>2</td><td>DINAMICA SPORT</td><td>301</td><td>10</td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="slm-card">
+  <h2>Classifica societ$([char]0x00E0) Master (provvisoria)</h2>
+  <table class="slm-table slm-ranking">
+    <thead>
+      <tr><th>Pos.</th><th>Societ$([char]0x00E0)</th><th>Punti Trofeo</th><th>Punti Coppa</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td>MASTER CLUB ASD</td><td>150</td><td>12</td></tr>
+    </tbody>
+  </table>
+</div>
+"@
+
+$parsedClubRankings = Parse-ClubRankings $sampleClubHtml "24" "I TAPPA - TROFEO FILIPPA" "2026-11-15"
+Assert-Equal "Classifiche societa estratte" $parsedClubRankings.Count 2
+Assert-Equal "Classifica 1 tipo" $parsedClubRankings[0].type "Giovani"
+Assert-Equal "Classifica 1 righe" $parsedClubRankings[0].rows.Count 2
+Assert-Equal "Classifica 1 primo club" $parsedClubRankings[0].rows[0].club "UISP RIVER BORGARO"
+Assert-Equal "Classifica 1 Dinamica pos" $parsedClubRankings[0].rows[1].position "2"
+Assert-Equal "Classifica 1 Dinamica punti trofeo" $parsedClubRankings[0].rows[1].trophyPoints "301"
+Assert-Equal "Classifica 1 Dinamica punti coppa" $parsedClubRankings[0].rows[1].cupPoints "10"
+Assert-Equal "Classifica 2 tipo" $parsedClubRankings[1].type "Master"
+
+$dsWithClub = Build-Dataset @() @() @() @() $cfg @() @() $parsedClubRankings
+Assert-Equal "Dataset con classifiche societa" $dsWithClub.clubRankings.Count 2
+$clubJson = $dsWithClub | ConvertTo-Json -Depth 10 -Compress
+Assert-True "JSON include array clubRankings" ($clubJson -match '"clubRankings":\[\{')
+
 Write-Host ""
 Write-Host ("Risultato test: {0} passati, {1} falliti." -f $script:passed, $script:failed)
 if ($script:failed -gt 0) { exit 1 }
