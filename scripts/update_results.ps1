@@ -325,13 +325,14 @@ function Parse-ClubRankings([string]$Html, [string]$MeetId, [string]$MeetTitle, 
     $rankings = New-Object System.Collections.Generic.List[object]
     if ([string]::IsNullOrWhiteSpace($Html)) { return @() }
 
-    $cardMatches = [regex]::Matches($Html, '<div[^>]*class="[^"]*slm-card[^"]*"[^>]*>(.*?)</div>\s*(?=(?:<div[^>]*class="[^"]*slm-card[^"]*"|$))', 'Singleline')
-    foreach ($cm in $cardMatches) {
-        $cHtml = $cm.Groups[1].Value
+    $chunks = [regex]::Split($Html, '(?=<div[^>]*class="[^"]*slm-card[^"]*")')
+    $rankingCards = @($chunks | Where-Object { $_ -match '(?i)Classifica\s+societ' })
+
+    foreach ($cHtml in $rankingCards) {
         $h2M = [regex]::Match($cHtml, '<h2[^>]*>(.*?)</h2>', 'Singleline')
         if (-not $h2M.Success) { continue }
         $title = Clean-HtmlText $h2M.Groups[1].Value
-        if ($title -notmatch '(?i)Classifica societ[aà]') { continue }
+        if ($title -notmatch '(?i)Classifica\s+societ') { continue }
 
         $type = "Generale"
         if ($title -match '(?i)Giovani') { $type = "Giovani" }
@@ -423,7 +424,7 @@ function Parse-SlmPage([string]$Html, [string]$SourceType, [string]$ClubRegex, [
     $sections = @([regex]::Matches($Html, '<(?:details|section)[^>]*class="[^"]*slm-public-event[^"]*"[^>]*>(.*?)</(?:details|section)>', 'Singleline') | ForEach-Object { $_.Groups[1].Value })
     if ($sections.Count -eq 0 -and $Html -match '<table[^>]*class="[^"]*slm-(?:table|public-ranking|ranking)') {
         $chunks = [regex]::Split($Html, '(?=<div[^>]*class="[^"]*slm-event-title[^"]*"|<details[^>]*class="[^"]*slm-public-event[^"]*")')
-        $sections = @($chunks | Where-Object { $_ -match '<table[^>]*class="[^"]*slm-(?:table|public-ranking|ranking)' -and $_ -notmatch '<p class="slm-eyebrow">Manifestazione</p>' -and $_ -notmatch '(?i)Classifica societ[aà]' })
+        $sections = @($chunks | Where-Object { $_ -match '<table[^>]*class="[^"]*slm-(?:table|public-ranking|ranking)' -and $_ -notmatch '<p class="slm-eyebrow">Manifestazione</p>' -and $_ -notmatch '(?i)Classifica\s+societ' })
     }
     if ($sections.Count -eq 0) {
         return [pscustomobject]@{ Records = @(); Relays = @(); ClubRankings = [object[]]$clubRankings.ToArray() }

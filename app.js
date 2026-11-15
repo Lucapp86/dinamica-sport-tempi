@@ -1115,16 +1115,21 @@
 
     const meetMap = new Map();
     for (const r of rankings) {
-      if (!meetMap.has(r.meetId)) {
-        meetMap.set(r.meetId, { meetId: r.meetId, meet: r.meet, date: r.date });
+      const mid = String(r.meetId ?? '');
+      if (!meetMap.has(mid)) {
+        meetMap.set(mid, { meetId: mid, meet: r.meet || 'Manifestazione', date: r.date || '' });
       }
     }
     const meets = Array.from(meetMap.values()).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
-    const prevMeet = els.clubRankingMeetSelect.value;
+    const prevMeet = String(els.clubRankingMeetSelect.value || '');
+    const hasPrev = meets.some((m) => m.meetId === prevMeet);
+    const selectedMeetId = hasPrev ? prevMeet : meets[0].meetId;
+
     els.clubRankingMeetSelect.innerHTML = meets
-      .map((m) => `<option value="${escapeHtml(m.meetId)}" ${m.meetId === prevMeet ? 'selected' : ''}>${escapeHtml(m.meet)}</option>`)
+      .map((m) => `<option value="${escapeHtml(m.meetId)}" ${m.meetId === selectedMeetId ? 'selected' : ''}>${escapeHtml(m.meet)}</option>`)
       .join('');
+    els.clubRankingMeetSelect.value = selectedMeetId;
 
     renderClubRankingsTypeFilter();
   }
@@ -1132,8 +1137,8 @@
   function renderClubRankingsTypeFilter() {
     const ds = state.activeDataset;
     const rankings = ds?.clubRankings || [];
-    const currentMeetId = els.clubRankingMeetSelect.value;
-    const meetRankings = rankings.filter((r) => !currentMeetId || r.meetId === currentMeetId);
+    const currentMeetId = String(els.clubRankingMeetSelect.value || '');
+    const meetRankings = rankings.filter((r) => !currentMeetId || String(r.meetId) === currentMeetId);
     const types = Array.from(new Set(meetRankings.map((r) => r.type || 'Generale')));
 
     const prevType = els.clubRankingTypeSelect.value || 'ALL';
@@ -1152,12 +1157,18 @@
   function renderClubRankingsView() {
     const ds = state.activeDataset;
     const rankings = ds?.clubRankings || [];
-    const currentMeetId = els.clubRankingMeetSelect.value;
+    const currentMeetId = String(els.clubRankingMeetSelect.value || '');
     const currentType = els.clubRankingTypeSelect.value || 'ALL';
 
-    let matches = rankings.filter((r) => !currentMeetId || r.meetId === currentMeetId);
+    let matches = rankings.filter((r) => !currentMeetId || String(r.meetId) === currentMeetId);
+    if (matches.length === 0 && rankings.length > 0) {
+      matches = rankings;
+    }
     if (currentType !== 'ALL') {
-      matches = matches.filter((r) => r.type === currentType);
+      const typeMatches = matches.filter((r) => r.type === currentType);
+      if (typeMatches.length > 0) {
+        matches = typeMatches;
+      }
     }
 
     if (matches.length === 0) {
