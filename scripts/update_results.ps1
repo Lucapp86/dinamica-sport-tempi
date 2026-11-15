@@ -325,10 +325,10 @@ function Parse-SlmPage([string]$Html, [string]$SourceType, [string]$ClubRegex, [
     $records = New-Object System.Collections.Generic.List[object]
     $relays = New-Object System.Collections.Generic.List[object]
 
-    $sections = @([regex]::Matches($Html, '<section[^>]*class="[^"]*slm-public-event[^"]*"[^>]*>(.*?)</section>', 'Singleline') | ForEach-Object { $_.Groups[1].Value })
-    if ($sections.Count -eq 0 -and $Html -match '<table[^>]*class="[^"]*slm-table') {
-        $chunks = [regex]::Split($Html, '(?=<div[^>]*class="[^"]*slm-event-title[^"]*")')
-        $sections = @($chunks | Where-Object { $_ -match '<table[^>]*class="[^"]*slm-table' -and $_ -notmatch '<p class="slm-eyebrow">Manifestazione</p>' })
+    $sections = @([regex]::Matches($Html, '<(?:details|section)[^>]*class="[^"]*slm-public-event[^"]*"[^>]*>(.*?)</(?:details|section)>', 'Singleline') | ForEach-Object { $_.Groups[1].Value })
+    if ($sections.Count -eq 0 -and $Html -match '<table[^>]*class="[^"]*slm-(?:table|public-ranking|ranking)') {
+        $chunks = [regex]::Split($Html, '(?=<div[^>]*class="[^"]*slm-event-title[^"]*"|<details[^>]*class="[^"]*slm-public-event[^"]*")')
+        $sections = @($chunks | Where-Object { $_ -match '<table[^>]*class="[^"]*slm-(?:table|public-ranking|ranking)' -and $_ -notmatch '<p class="slm-eyebrow">Manifestazione</p>' })
     }
     if ($sections.Count -eq 0) {
         return [pscustomobject]@{ Records = @(); Relays = @() }
@@ -369,10 +369,16 @@ function Parse-SlmPage([string]$Html, [string]$SourceType, [string]$ClubRegex, [
         $evM = [regex]::Match($sec, '<div[^>]*class="[^"]*slm-event-title[^"]*"[^>]*>.*?<h2[^>]*>(.*?)</h2>(?:.*?<span[^>]*class="[^"]*slm-muted[^"]*"[^>]*>(.*?)</span>)?', 'Singleline')
         $rawEvent = if ($evM.Success) { Clean-HtmlText $evM.Groups[1].Value } else { "" }
         $rawMeta = if ($evM.Success) { Clean-HtmlText $evM.Groups[2].Value } else { "" }
+        if (-not $rawEvent) {
+            $sumTitleM = [regex]::Match($sec, 'class="[^"]*slm-event-summary-title[^"]*"[^>]*>(.*?)</span>', 'Singleline')
+            if ($sumTitleM.Success) { $rawEvent = Clean-HtmlText $sumTitleM.Groups[1].Value }
+            $sumMetaM = [regex]::Match($sec, 'class="[^"]*slm-event-summary-meta[^"]*"[^>]*>(.*?)</span>', 'Singleline')
+            if ($sumMetaM.Success) { $rawMeta = Clean-HtmlText $sumMetaM.Groups[1].Value }
+        }
         $eventName = Normalize-EventName $rawEvent
         $catInfo = Normalize-CategoryAndGender $rawMeta
 
-        $tableMatches = [regex]::Matches($sec, '<table[^>]*class="[^"]*slm-table[^"]*"[^>]*>(.*?)</table>', 'Singleline')
+        $tableMatches = [regex]::Matches($sec, '<table[^>]*class="[^"]*slm-(?:table|public-ranking|ranking)[^"]*"[^>]*>(.*?)</table>', 'Singleline')
         foreach ($tm in $tableMatches) {
             $tableHtml = $tm.Groups[1].Value
             $headers = @()
@@ -389,10 +395,11 @@ function Parse-SlmPage([string]$Html, [string]$SourceType, [string]$ClubRegex, [
 
             $rowMatches = [regex]::Matches($tbodyHtml, '<tr[^>]*>(.*?)</tr>', 'Singleline')
             foreach ($rm in $rowMatches) {
-                $cells = [regex]::Matches($rm.Groups[1].Value, '<td[^>]*>(.*?)</td>', 'Singleline') | ForEach-Object {
-                    Clean-HtmlText $_.Groups[1].Value
-                }
-                if ($cells.Count -lt 4) { continue }
+                $rowHtml = $rm.Groups[1].Value
+                $tdMatches = [regex]::Matches($rowHtml, '<td[^>]*>(.*?)</td>', 'Singleline')
+                if ($tdMatches.Count -lt 4) { continue }
+
+                $cells = @($tdMatches | ForEach-Object { Clean-HtmlText $_.Groups[1].Value })
 
                 $rowMap = @{}
                 for ($i = 0; $i -lt $cells.Count; $i++) {
@@ -406,11 +413,22 @@ function Parse-SlmPage([string]$Html, [string]$SourceType, [string]$ClubRegex, [
                 }
                 if (-not $club -and $cells.Count -ge 4) { $club = $cells[3] }
 
+                $competitorTd = [regex]::Match($rowHtml, '<td[^>]*class="[^"]*slm-competitor[^"]*"[^>]*>(.*?)</td>', 'Singleline')
                 $athleteRaw = ""
-                foreach ($k in @("atleta", "nominativo", "nuotatore", "staffetta")) {
-                    if ($rowMap.ContainsKey($k)) { $athleteRaw = $rowMap[$k]; break }
+                $tessera = ""
+                if ($competitorTd.Success) {
+                    $cHtml = $competitorTd.Groups[1].Value
+                    $strM = [regex]::Match($cHtml, '<strong>(.*?)</strong>', 'Singleline')
+                    if ($strM.Success) { $athleteRaw = Clean-HtmlText $strM.Groups[1].Value }
+                    $codeM = [regex]::Match($cHtml, '<small[^>]*class="[^"]*slm-athlete-code[^"]*"[^>]*>(.*?)</small>', 'Singleline')
+                    if ($codeM.Success) { $tessera = Clean-HtmlText $codeM.Groups[1].Value }
                 }
-                if (-not $athleteRaw -and $cells.Count -ge 2) { $athleteRaw = $cells[1] }
+                if (-not $athleteRaw) {
+                    foreach ($k in @("atleta", "nominativo", "nuotatore", "staffetta")) {
+                        if ($rowMap.ContainsKey($k)) { $athleteRaw = $rowMap[$k]; break }
+                    }
+                    if (-not $athleteRaw -and $cells.Count -ge 2) { $athleteRaw = $cells[1] }
+                }
 
                 $matchesClub = ($club -match $ClubRegex) -or ($athleteRaw -match $ClubRegex)
                 if (-not $matchesClub) { continue }
@@ -420,21 +438,44 @@ function Parse-SlmPage([string]$Html, [string]$SourceType, [string]$ClubRegex, [
                     if ($rowMap.ContainsKey($k)) { $year = $rowMap[$k]; break }
                 }
 
-                $tessera = ""
-                foreach ($k in @("tessera", "codice tessera", "id")) {
-                    if ($rowMap.ContainsKey($k)) { $tessera = $rowMap[$k]; break }
+                if (-not $tessera) {
+                    foreach ($k in @("tessera", "codice tessera", "id")) {
+                        if ($rowMap.ContainsKey($k)) { $tessera = $rowMap[$k]; break }
+                    }
                 }
                 if ($tessera -in @([string][char]0x2014, "-", "N.D.")) { $tessera = "" }
 
+                $timeTd = [regex]::Match($rowHtml, '<td[^>]*class="[^"]*slm-public-time[^"]*"[^>]*>(.*?)</td>', 'Singleline')
                 $rawTime = ""
-                foreach ($k in @("tempo", "crono", "risultato", "tempo finale")) {
-                    if ($rowMap.ContainsKey($k)) { $rawTime = $rowMap[$k]; break }
+                $splitNotes = ""
+                if ($timeTd.Success) {
+                    $tHtml = $timeTd.Groups[1].Value
+                    $splitsM = [regex]::Match($tHtml, '<div[^>]*class="[^"]*slm-splits-inline[^"]*"[^>]*>(.*?)</div>', 'Singleline')
+                    if ($splitsM.Success) {
+                        $splitNotes = Clean-HtmlText $splitsM.Groups[1].Value
+                    }
+                    $tOnly = Clean-HtmlText ($tHtml -replace '<div[^>]*class="[^"]*slm-splits-inline[^"]*".*$', '')
+                    $rawTime = $tOnly
+                }
+                if (-not $rawTime) {
+                    foreach ($k in @("tempo", "crono", "risultato", "tempo finale")) {
+                        if ($rowMap.ContainsKey($k)) { $rawTime = $rowMap[$k]; break }
+                    }
                 }
                 if (-not $rawTime) { $rawTime = $cells[$cells.Count - 1] }
 
+                if ($rawTime -match '^(\d{1,2}[:''\u2019\.]\d{1,2}[.`"'']\d{1,2}|\d{1,3}\.\d{1,2})\s*(.*)$') {
+                    $cleanT = $Matches[1]
+                    if ($Matches[2] -and -not $splitNotes) { $splitNotes = $Matches[2].Trim() }
+                    $rawTime = $cleanT
+                }
+
                 $pos = ""
-                foreach ($k in @("pos", "pos ", "posizione", "class", "cl")) {
+                foreach ($k in @("pos", "pos ", "pos.", "posizione", "class", "cl")) {
                     if ($rowMap.ContainsKey($k)) { $pos = $rowMap[$k]; break }
+                }
+                if (-not $pos -and $cells.Count -ge 1 -and $cells[0] -match '^\d+$') {
+                    $pos = $cells[0]
                 }
 
                 $notes = ""
@@ -443,6 +484,9 @@ function Parse-SlmPage([string]$Html, [string]$SourceType, [string]$ClubRegex, [
                     if ($rowMap.ContainsKey($k) -and $rowMap[$k]) {
                         $notes = if ($notes) { "$notes$sepDot$($rowMap[$k])" } else { $rowMap[$k] }
                     }
+                }
+                if ($splitNotes) {
+                    $notes = if ($notes) { "$notes$sepDot$splitNotes" } else { $splitNotes }
                 }
 
                 $parsedTime = Parse-SwimTime $rawTime
