@@ -240,7 +240,7 @@ $dsWithComments = Build-Dataset @($parsed.Records[0]) $manualParsed @() @() $cfg
 Assert-Equal "Dataset con commenti count" $dsWithComments.comments.Count 2
 Assert-Equal "Dataset commento 1 atleta" $dsWithComments.comments[0].athleteName "Piana Ginevra"
 Assert-Equal "Dataset commento 2 atleta" $dsWithComments.comments[1].athleteName "Borzillo Gregorio"
-Assert-Equal "Dataset coachPin default" $dsWithComments.coachPin "2026"
+Assert-Equal "Dataset coachPin da config" $dsWithComments.coachPin "0286"
 $commJson = $dsWithComments | ConvertTo-Json -Depth 10 -Compress
 Assert-True "JSON include array comments" ($commJson -match '"comments":\[\{')
 

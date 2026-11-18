@@ -10,18 +10,18 @@ Hai due modi semplici per accedere come allenatore, sia da **smartphone** che da
 
 ### Opzione A: Dalla schermata iniziale di accesso (Login)
 1. Tocca la scheda **⏱️ Allenatore** in cima al modulo di login.
-2. Inserisci la **Password di squadra** e il **PIN Allenatore** (PIN predefinito: `2026`).
+2. Inserisci la **Password di squadra** e il **PIN Allenatore** (PIN impostato: `0286`).
 3. Clicca su **Accedi come Allenatore**.
 4. L'applicazione si aprirà direttamente con i permessi di scrittura e modifica abilitati.
 
 ### Opzione B: Direttamente dall'interno dell'app
 Se sei già entrato come genitore/atleta:
 1. In alto a destra nella barra superiore tocca il pulsante **⏱️ Accesso Coach**.
-2. Digita il PIN `2026` e tocca **Attiva Modalità Coach**.
+2. Digita il PIN `0286` e tocca **Attiva Modalità Coach**.
 3. Il pulsante diventerà verde con la dicitura **⏱️ Coach Attivo ✓**.
 
 > [!TIP]
-> Il PIN `2026` può essere modificato a piacimento nel file `config.team.json` alla voce `"coachPin"`.
+> Il PIN `0286` può essere modificato a piacimento nel file `config.team.json` alla voce `"coachPin"`.
 
 ---
 

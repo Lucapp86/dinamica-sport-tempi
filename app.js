@@ -308,7 +308,7 @@
   function saveLocalComments(comments) {
     try {
       localStorage.setItem(COMMENTS_STORAGE_KEY, JSON.stringify(comments));
-    } catch (_) {}
+    } catch (_) { }
   }
 
   function normalizeTextKey(txt) {
@@ -368,7 +368,7 @@
       } else {
         localStorage.removeItem(COACH_STORAGE_KEY);
       }
-    } catch (_) {}
+    } catch (_) { }
 
     if (els.coachModeBtn) {
       els.coachModeBtn.classList.toggle('coach-active', state.isCoach);
@@ -488,7 +488,7 @@
     const author = els.commentAuthor.value.trim() || 'Coach';
     try {
       localStorage.setItem(COACH_AUTHOR_KEY, author);
-    } catch (_) {}
+    } catch (_) { }
 
     const athlete = (state.activeDataset?.athletes || []).find((a) => a.id === ctx.athleteId);
     const athleteName = athlete ? athlete.name : ctx.athleteName || '';
@@ -1637,7 +1637,7 @@
       } else {
         sessionStorage.setItem(STORAGE_KEY, pw);
       }
-    } catch (_) {}
+    } catch (_) { }
   }
 
   function loadSavedPassword() {
@@ -1652,7 +1652,7 @@
     try {
       localStorage.removeItem(STORAGE_KEY);
       sessionStorage.removeItem(STORAGE_KEY);
-    } catch (_) {}
+    } catch (_) { }
   }
 
   async function tryUnlock(password, coachPinAttempt = '') {

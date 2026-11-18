@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="it">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -10,6 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css?v=20261118a">
 </head>
+
 <body>
   <!-- SCHERMATA DI ACCESSO CON PASSWORD SQUADRA / ALLENATORE -->
   <div id="auth-screen" class="auth-screen">
@@ -33,13 +35,8 @@
       <form id="auth-form" class="auth-form">
         <label for="team-password">Password di squadra</label>
         <div class="password-wrap">
-          <input
-            id="team-password"
-            type="password"
-            autocomplete="current-password"
-            placeholder="Inserisci la password..."
-            required
-          >
+          <input id="team-password" type="password" autocomplete="current-password"
+            placeholder="Inserisci la password..." required>
           <button type="button" id="toggle-pw-btn" class="icon-btn" aria-label="Mostra o nascondi password">
             Mostra
           </button>
@@ -48,13 +45,7 @@
         <!-- PIN COACH AGGIUNTIVO (SOLO SE SELEZIONATO RUOLO ALLENATORE) -->
         <div id="coach-pin-field" class="coach-pin-field hidden">
           <label for="coach-pin">PIN Allenatore</label>
-          <input
-            id="coach-pin"
-            type="password"
-            inputmode="numeric"
-            maxlength="8"
-            placeholder="PIN Coach (es. 2026)"
-          >
+          <input id="coach-pin" type="password" inputmode="numeric" maxlength="8" placeholder="PIN Coach">
           <span class="muted-small">PIN riservato allo staff per inserire commenti tecnici</span>
         </div>
 
@@ -71,11 +62,14 @@
       </form>
 
       <div id="local-file-fallback" class="local-fallback hidden">
-        <p>Hai aperto il file direttamente dal disco (<code>file://</code>). Usa il link online oppure avvia <strong>avvia-app.bat</strong> sul tuo PC.</p>
+        <p>Hai aperto il file direttamente dal disco (<code>file://</code>). Usa il link online oppure avvia
+          <strong>avvia-app.bat</strong> sul tuo PC.
+        </p>
       </div>
 
       <p class="auth-footer">
-        Dati cifrati AES-256 · Fonte: <a href="https://nuotopiemonte-uisp.it/" target="_blank" rel="noopener">nuotopiemonte-uisp.it</a>
+        Dati cifrati AES-256 · Fonte: <a href="https://nuotopiemonte-uisp.it/" target="_blank"
+          rel="noopener">nuotopiemonte-uisp.it</a>
       </p>
     </div>
   </div>
@@ -92,7 +86,8 @@
           </div>
         </div>
         <div class="topbar-actions">
-          <button type="button" id="coach-mode-btn" class="btn btn-outline btn-sm coach-top-btn" title="Passa alla modalità Allenatore">
+          <button type="button" id="coach-mode-btn" class="btn btn-outline btn-sm coach-top-btn"
+            title="Passa alla modalità Allenatore">
             ⏱️ Accesso Coach
           </button>
           <button type="button" id="logout-btn" class="btn btn-outline btn-sm">
@@ -125,13 +120,8 @@
       <section id="view-athletes" class="view-panel">
         <div class="filters-card">
           <div class="search-row">
-            <input
-              type="search"
-              id="athlete-search"
-              class="input-search"
-              placeholder="Cerca atleta per nome o anno..."
-              aria-label="Cerca atleta"
-            >
+            <input type="search" id="athlete-search" class="input-search" placeholder="Cerca atleta per nome o anno..."
+              aria-label="Cerca atleta">
             <select id="gender-filter" class="select-compact" aria-label="Filtra per sesso">
               <option value="ALL">Tutti (F/M)</option>
               <option value="F">Femmine</option>
@@ -310,17 +300,20 @@
   </div>
 
   <!-- MODALE PIN ALLENATORE -->
-  <div id="coach-pin-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="coach-modal-title">
+  <div id="coach-pin-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true"
+    aria-labelledby="coach-modal-title">
     <div class="modal-card">
       <div class="modal-header">
         <h3 id="coach-modal-title">⏱️ Modalità Allenatore</h3>
-        <button type="button" class="icon-btn close-modal-btn" data-close="coach-pin-modal" aria-label="Chiudi">&times;</button>
+        <button type="button" class="icon-btn close-modal-btn" data-close="coach-pin-modal"
+          aria-label="Chiudi">&times;</button>
       </div>
       <div class="modal-body">
-        <p class="modal-desc">Inserisci il PIN per abilitare l'inserimento e la modifica dei commenti tecnici sulle prestazioni degli atleti.</p>
+        <p class="modal-desc">Inserisci il PIN per abilitare l'inserimento e la modifica dei commenti tecnici sulle
+          prestazioni degli atleti.</p>
         <div class="field-group">
           <label for="modal-coach-pin">PIN Allenatore</label>
-          <input id="modal-coach-pin" type="password" inputmode="numeric" maxlength="8" placeholder="PIN (es. 2026)">
+          <input id="modal-coach-pin" type="password" inputmode="numeric" maxlength="8" placeholder="PIN Coach">
         </div>
         <div id="coach-pin-error" class="alert alert-error hidden"></div>
       </div>
@@ -332,11 +325,13 @@
   </div>
 
   <!-- MODALE INSERIMENTO / MODIFICA COMMENTO TECNICO -->
-  <div id="comment-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="comment-modal-title">
+  <div id="comment-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true"
+    aria-labelledby="comment-modal-title">
     <div class="modal-card modal-card-lg">
       <div class="modal-header">
         <h3 id="comment-modal-title">💬 Commento Tecnico Coach</h3>
-        <button type="button" class="icon-btn close-modal-btn" data-close="comment-modal" aria-label="Chiudi">&times;</button>
+        <button type="button" class="icon-btn close-modal-btn" data-close="comment-modal"
+          aria-label="Chiudi">&times;</button>
       </div>
       <div class="modal-body">
         <div id="comment-race-summary" class="comment-race-summary"></div>
@@ -357,7 +352,8 @@
             <button type="button" class="quick-tag" data-tag="Frequenza">Frequenza</button>
             <button type="button" class="quick-tag" data-tag="Arrivo">Arrivo</button>
           </div>
-          <textarea id="comment-textarea" rows="4" placeholder="Es. Ottima partenza e subacquea profonda. Curare la frequenza di bracciata nel secondo 25m e l'arrivo alla piastra..."></textarea>
+          <textarea id="comment-textarea" rows="4"
+            placeholder="Es. Ottima partenza e subacquea profonda. Curare la frequenza di bracciata nel secondo 25m e l'arrivo alla piastra..."></textarea>
         </div>
 
         <div id="comment-modal-status" class="alert hidden"></div>
@@ -372,5 +368,5 @@
 
   <script src="app.js?v=20261118a"></script>
 </body>
-</html>
 
+</html>
