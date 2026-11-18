@@ -435,6 +435,26 @@
     }
   }
 
+  async function fetchRemoteComments() {
+    const apiUrl = state.activeDataset?.commentsApiUrl || '';
+    if (!apiUrl) return;
+
+    try {
+      const resp = await fetch(apiUrl, { method: 'GET', cache: 'no-store' });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const remote = Array.isArray(data) ? data : data.comments || [];
+      if (remote.length > 0) {
+        state.comments = mergeComments(state.comments, remote);
+        if (state.currentView === 'detail' && state.selectedAthleteId) {
+          renderAthleteDetail(state.selectedAthleteId);
+        }
+      }
+    } catch (err) {
+      console.warn('Impossibile scaricare commenti remoti dal cloud:', err);
+    }
+  }
+
   function openCommentModal(context) {
     state.editingCommentContext = context;
     const existing = context.existingComment;
@@ -1693,6 +1713,7 @@
     els.authScreen.classList.add('hidden');
     els.appShell.classList.remove('hidden');
     renderApp();
+    fetchRemoteComments();
   }
 
   function showAuthError(msg) {
@@ -1768,6 +1789,7 @@
       if (entered === expected) {
         els.coachPinModal.classList.add('hidden');
         setCoachMode(true);
+        fetchRemoteComments();
       } else {
         els.coachPinError.textContent = 'PIN non corretto. Riprova.';
         els.coachPinError.classList.remove('hidden');
