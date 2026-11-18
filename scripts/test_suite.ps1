@@ -224,6 +224,26 @@ Assert-Equal "Dataset con classifiche societa" $dsWithClub.clubRankings.Count 1
 $clubJson = $dsWithClub | ConvertTo-Json -Depth 10 -Compress
 Assert-True "JSON include array clubRankings" ($clubJson -match '"clubRankings":\[\{')
 
+# 9. Test parsing commenti tecnici e integrazione in Build-Dataset
+$sampleCommentsCsv = @"
+Atleta;Data;Gara;Commento;Allenatore
+PIANA GINEVRA;2026-11-15;50 m Stile libero;Ottima virata e ritmo alto nei primi 25m.;Coach Luca
+BORZILLO GREGORIO;2026-06-13;100 m Misti;Buona la rana, velocizzare l'uscita dalla virata dorso-rana.;Coach Marco
+"@
+$parsedComments = @(Parse-CommentsCsv $sampleCommentsCsv)
+Assert-Equal "Commenti parsati count" $parsedComments.Count 2
+Assert-Equal "Commento 1 Atleta" $parsedComments[0].athleteName "Piana Ginevra"
+Assert-Equal "Commento 1 Testo" $parsedComments[0].text "Ottima virata e ritmo alto nei primi 25m."
+Assert-Equal "Commento 1 Autore" $parsedComments[0].author "Coach Luca"
+
+$dsWithComments = Build-Dataset @($parsed.Records[0]) $manualParsed @() @() $cfg @() @() @() $parsedComments
+Assert-Equal "Dataset con commenti count" $dsWithComments.comments.Count 2
+Assert-Equal "Dataset commento 1 atleta" $dsWithComments.comments[0].athleteName "Piana Ginevra"
+Assert-Equal "Dataset commento 2 atleta" $dsWithComments.comments[1].athleteName "Borzillo Gregorio"
+Assert-Equal "Dataset coachPin default" $dsWithComments.coachPin "2026"
+$commJson = $dsWithComments | ConvertTo-Json -Depth 10 -Compress
+Assert-True "JSON include array comments" ($commJson -match '"comments":\[\{')
+
 Write-Host ""
 Write-Host ("Risultato test: {0} passati, {1} falliti." -f $script:passed, $script:failed)
 if ($script:failed -gt 0) { exit 1 }

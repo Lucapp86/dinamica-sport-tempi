@@ -3,6 +3,9 @@
 
   const DATA_URL = './data/team-data.enc.json';
   const STORAGE_KEY = 'dinamica_swim_pw_v1';
+  const COACH_STORAGE_KEY = 'dinamica_coach_auth_v1';
+  const COMMENTS_STORAGE_KEY = 'dinamica_coach_comments_v1';
+  const COACH_AUTHOR_KEY = 'dinamica_coach_author_v1';
 
   const STROKE_ORDER = ['stile libero', 'dorso', 'rana', 'farfalla', 'misti', 'mista'];
 
@@ -17,7 +20,11 @@
     selectedAthleteId: null,
     selectedChartEvent: '',
     selectedChartPool: 'ALL',
-    selectedSubtab: 'history'
+    selectedSubtab: 'history',
+    isCoach: false,
+    authRole: 'swimmer',
+    comments: [],
+    editingCommentContext: null
   };
 
   const els = {
@@ -30,6 +37,23 @@
     authError: document.getElementById('auth-error'),
     unlockBtn: document.getElementById('unlock-btn'),
     localFallback: document.getElementById('local-file-fallback'),
+    roleSwimmerBtn: document.getElementById('role-swimmer-btn'),
+    roleCoachBtn: document.getElementById('role-coach-btn'),
+    coachPinField: document.getElementById('coach-pin-field'),
+    coachPinInput: document.getElementById('coach-pin'),
+    coachModeBtn: document.getElementById('coach-mode-btn'),
+    coachPinModal: document.getElementById('coach-pin-modal'),
+    modalCoachPin: document.getElementById('modal-coach-pin'),
+    coachPinError: document.getElementById('coach-pin-error'),
+    confirmCoachPinBtn: document.getElementById('confirm-coach-pin-btn'),
+    commentModal: document.getElementById('comment-modal'),
+    commentRaceSummary: document.getElementById('comment-race-summary'),
+    commentAuthor: document.getElementById('comment-author'),
+    commentTextarea: document.getElementById('comment-textarea'),
+    commentModalStatus: document.getElementById('comment-modal-status'),
+    saveCommentBtn: document.getElementById('save-comment-btn'),
+    deleteCommentBtn: document.getElementById('delete-comment-btn'),
+    quickTags: document.getElementById('quick-tags'),
     clubTitle: document.getElementById('club-title'),
     lastUpdatedText: document.getElementById('last-updated-text'),
     logoutBtn: document.getElementById('logout-btn'),
@@ -268,6 +292,260 @@
 
     pbs.sort((a, b) => compareEvents(a.event, b.event));
     return pbs;
+  }
+
+  /* ==================== COMMENTI & MODALITÀ COACH ==================== */
+
+  function loadLocalComments() {
+    try {
+      const raw = localStorage.getItem(COMMENTS_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function saveLocalComments(comments) {
+    try {
+      localStorage.setItem(COMMENTS_STORAGE_KEY, JSON.stringify(comments));
+    } catch (_) {}
+  }
+
+  function normalizeTextKey(txt) {
+    return String(txt || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/['’"`.,\-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function mergeComments(datasetComments = [], localComments = []) {
+    const map = new Map();
+
+    for (const c of datasetComments) {
+      if (!c || !c.text) continue;
+      const key = c.id || `${c.athleteId || normalizeTextKey(c.athleteName)}|${c.date}|${normalizeTextKey(c.event)}`;
+      map.set(key, { ...c });
+    }
+
+    for (const c of localComments) {
+      if (!c) continue;
+      const key = c.id || `${c.athleteId || normalizeTextKey(c.athleteName)}|${c.date}|${normalizeTextKey(c.event)}`;
+      if (c._deleted) {
+        map.delete(key);
+      } else {
+        map.set(key, { ...c });
+      }
+    }
+
+    return Array.from(map.values()).filter((c) => !c._deleted);
+  }
+
+  function findComment(athleteId, athleteName, date, event) {
+    if (!state.comments || state.comments.length === 0) return null;
+    const normEv = normalizeTextKey(event);
+    const normName = normalizeTextKey(athleteName);
+
+    return (
+      state.comments.find((c) => {
+        const evMatches = normalizeTextKey(c.event) === normEv;
+        const dtMatches = !date || !c.date || c.date === date;
+        const athleteMatches =
+          (athleteId && c.athleteId === athleteId) ||
+          (normName && normalizeTextKey(c.athleteName) === normName);
+        return evMatches && dtMatches && athleteMatches;
+      }) || null
+    );
+  }
+
+  function setCoachMode(enabled) {
+    state.isCoach = !!enabled;
+    try {
+      if (state.isCoach) {
+        localStorage.setItem(COACH_STORAGE_KEY, 'true');
+      } else {
+        localStorage.removeItem(COACH_STORAGE_KEY);
+      }
+    } catch (_) {}
+
+    if (els.coachModeBtn) {
+      els.coachModeBtn.classList.toggle('coach-active', state.isCoach);
+      els.coachModeBtn.textContent = state.isCoach ? '⏱️ Coach Attivo ✓' : '⏱️ Accesso Coach';
+      els.coachModeBtn.title = state.isCoach
+        ? 'Modalità Allenatore attiva (clicca per esportare o disattivare)'
+        : 'Passa alla modalità Allenatore';
+    }
+
+    if (state.currentView === 'detail' && state.selectedAthleteId) {
+      renderAthleteDetail(state.selectedAthleteId);
+    }
+  }
+
+  function isSavedCoachAuth() {
+    try {
+      return localStorage.getItem(COACH_STORAGE_KEY) === 'true';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function exportCommentsCsv() {
+    const comments = state.comments || [];
+    if (comments.length === 0) {
+      alert('Nessun commento tecnico salvato da esportare.');
+      return;
+    }
+    const headers = ['Atleta', 'Data', 'Gara', 'Commento', 'Allenatore', 'DataAggiornamento', 'Id'];
+    const rows = comments.map((c) => [
+      `"${String(c.athleteName || '').replace(/"/g, '""')}"`,
+      `"${String(c.date || '').replace(/"/g, '""')}"`,
+      `"${String(c.event || '').replace(/"/g, '""')}"`,
+      `"${String(c.text || '').replace(/"/g, '""')}"`,
+      `"${String(c.author || 'Coach').replace(/"/g, '""')}"`,
+      `"${String(c.updatedAt || '').replace(/"/g, '""')}"`,
+      `"${String(c.id || '').replace(/"/g, '""')}"`
+    ]);
+    const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `commenti_dinamica_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  async function syncCommentToApi(commentObj, action = 'save') {
+    const apiUrl = state.activeDataset?.commentsApiUrl || '';
+    if (!apiUrl) return;
+
+    try {
+      await fetch(apiUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, comment: commentObj, timestamp: new Date().toISOString() })
+      });
+    } catch (err) {
+      console.warn('Sync remoto commento non riuscito (dati comunque salvati in locale):', err);
+    }
+  }
+
+  function openCommentModal(context) {
+    state.editingCommentContext = context;
+    const existing = context.existingComment;
+
+    const savedAuthor = localStorage.getItem(COACH_AUTHOR_KEY) || 'Coach Luca';
+    els.commentAuthor.value = existing ? existing.author || savedAuthor : savedAuthor;
+    els.commentTextarea.value = existing ? existing.text : '';
+    els.commentModalStatus.className = 'alert hidden';
+
+    const athlete = (state.activeDataset?.athletes || []).find((a) => a.id === context.athleteId);
+    const athleteName = athlete ? athlete.name : context.athleteName || 'Atleta';
+
+    els.commentRaceSummary.innerHTML = `
+      <div class="summary-title">${escapeHtml(athleteName)}</div>
+      <div class="summary-sub">
+        <span>🏁 <strong>${escapeHtml(context.event)}</strong></span>
+        <span>⏱️ <strong>${escapeHtml(context.time || '—')}</strong></span>
+        <span>📅 ${escapeHtml(formatDateIt(context.date))}</span>
+        <span>📍 ${escapeHtml(context.meet || 'Gara')}</span>
+      </div>
+    `;
+
+    if (existing) {
+      els.deleteCommentBtn.classList.remove('hidden');
+      els.saveCommentBtn.textContent = 'Aggiorna Commento';
+    } else {
+      els.deleteCommentBtn.classList.add('hidden');
+      els.saveCommentBtn.textContent = 'Salva Commento';
+    }
+
+    els.commentModal.classList.remove('hidden');
+    setTimeout(() => els.commentTextarea.focus(), 50);
+  }
+
+  function closeCommentModal() {
+    els.commentModal.classList.add('hidden');
+    state.editingCommentContext = null;
+  }
+
+  function saveCurrentComment() {
+    const ctx = state.editingCommentContext;
+    if (!ctx) return;
+
+    const text = els.commentTextarea.value.trim();
+    if (!text) {
+      els.commentModalStatus.textContent = 'Inserisci il testo del commento prima di salvare.';
+      els.commentModalStatus.className = 'alert alert-error';
+      return;
+    }
+
+    const author = els.commentAuthor.value.trim() || 'Coach';
+    try {
+      localStorage.setItem(COACH_AUTHOR_KEY, author);
+    } catch (_) {}
+
+    const athlete = (state.activeDataset?.athletes || []).find((a) => a.id === ctx.athleteId);
+    const athleteName = athlete ? athlete.name : ctx.athleteName || '';
+
+    const id = ctx.existingComment?.id || 'c_' + Math.random().toString(36).slice(2, 11) + Date.now().toString(36);
+    const nowIso = new Date().toISOString();
+
+    const newComment = {
+      id,
+      athleteId: ctx.athleteId,
+      athleteName,
+      date: ctx.date || '',
+      event: ctx.event || '',
+      text,
+      author,
+      updatedAt: nowIso
+    };
+
+    const locals = loadLocalComments().filter(
+      (c) =>
+        c.id !== id &&
+        !(c.athleteId === ctx.athleteId && c.date === ctx.date && normalizeTextKey(c.event) === normalizeTextKey(ctx.event))
+    );
+    locals.push(newComment);
+    saveLocalComments(locals);
+
+    state.comments = mergeComments(state.activeDataset?.comments || [], locals);
+
+    syncCommentToApi(newComment, 'save');
+
+    closeCommentModal();
+
+    if (state.selectedAthleteId) {
+      renderAthleteDetail(state.selectedAthleteId);
+    }
+  }
+
+  function deleteCurrentComment() {
+    const ctx = state.editingCommentContext;
+    if (!ctx || !ctx.existingComment) return;
+
+    if (!confirm('Sei sicuro di voler eliminare questo commento tecnico?')) return;
+
+    const id = ctx.existingComment.id;
+    const locals = loadLocalComments().filter((c) => c.id !== id);
+    locals.push({ ...ctx.existingComment, _deleted: true });
+    saveLocalComments(locals);
+
+    state.comments = mergeComments(state.activeDataset?.comments || [], locals);
+
+    syncCommentToApi(ctx.existingComment, 'delete');
+
+    closeCommentModal();
+
+    if (state.selectedAthleteId) {
+      renderAthleteDetail(state.selectedAthleteId);
+    }
   }
 
   /* ==================== RENDERING ==================== */
@@ -823,6 +1101,59 @@
       const rows = sortedRes
         .map((r) => {
           const isPb = r.timeCs && pbKeys.has(`${r.event}|${r.date}|${r.timeCs}`);
+          const athlete = (state.activeDataset?.athletes || []).find((a) => a.id === (r.athleteId || state.selectedAthleteId));
+          const athleteName = athlete ? athlete.name : '';
+          const comment = findComment(r.athleteId || state.selectedAthleteId, athleteName, r.date, r.event);
+
+          let commentRowHtml = '';
+          if (comment) {
+            commentRowHtml = `
+              <tr class="comment-tr">
+                <td colspan="6">
+                  <div class="coach-comment-box">
+                    <div class="coach-comment-top">
+                      <span class="coach-comment-author">💬 <strong>Feedback Tecnico</strong> (${escapeHtml(comment.author || 'Coach')})</span>
+                      <div class="coach-comment-actions">
+                        <span class="coach-comment-meta">${escapeHtml(formatDateTimeIt(comment.updatedAt))}</span>
+                        ${state.isCoach ? `
+                          <button
+                            type="button"
+                            class="btn btn-xs btn-outline edit-comment-btn"
+                            data-athlete-id="${escapeHtml(r.athleteId || state.selectedAthleteId)}"
+                            data-date="${escapeHtml(r.date || '')}"
+                            data-event="${escapeHtml(r.event || '')}"
+                            data-time="${escapeHtml(r.time || '')}"
+                            data-meet="${escapeHtml(r.meet || '')}"
+                            data-comment-id="${escapeHtml(comment.id)}"
+                          >✏️ Modifica</button>
+                        ` : ''}
+                      </div>
+                    </div>
+                    <div class="coach-comment-text">${escapeHtml(comment.text)}</div>
+                  </div>
+                </td>
+              </tr>
+            `;
+          } else if (state.isCoach) {
+            commentRowHtml = `
+              <tr class="comment-tr">
+                <td colspan="6">
+                  <button
+                    type="button"
+                    class="add-comment-btn"
+                    data-athlete-id="${escapeHtml(r.athleteId || state.selectedAthleteId)}"
+                    data-date="${escapeHtml(r.date || '')}"
+                    data-event="${escapeHtml(r.event || '')}"
+                    data-time="${escapeHtml(r.time || '')}"
+                    data-meet="${escapeHtml(r.meet || '')}"
+                  >
+                    💬 + Aggiungi commento tecnico Coach
+                  </button>
+                </td>
+              </tr>
+            `;
+          }
+
           return `
             <tr>
               <td>${escapeHtml(formatDateIt(r.date))}</td>
@@ -836,6 +1167,7 @@
               </td>
               <td>${escapeHtml(r.position || '—')}</td>
             </tr>
+            ${commentRowHtml}
           `;
         })
         .join('');
@@ -1323,7 +1655,7 @@
     } catch (_) {}
   }
 
-  async function tryUnlock(password) {
+  async function tryUnlock(password, coachPinAttempt = '') {
     els.authError.classList.add('hidden');
     if (!state.envelope) {
       const resp = await fetch(`${DATA_URL}?ts=${Date.now()}`, { cache: 'no-store' });
@@ -1334,6 +1666,28 @@
     const decrypted = await decryptEnvelope(state.envelope, password);
     state.realDataset = decrypted;
     state.activeDataset = decrypted;
+
+    // Inizializza i commenti unendo quelli integrati nel dataset con le modifiche locali
+    const localComments = loadLocalComments();
+    state.comments = mergeComments(decrypted.comments || [], localComments);
+
+    // Gestione ruolo coach
+    const expectedCoachPin = String(decrypted.coachPin || '2026').trim();
+    if (state.authRole === 'coach') {
+      const enteredPin = String(coachPinAttempt || els.coachPinInput.value || '').trim();
+      if (enteredPin && enteredPin === expectedCoachPin) {
+        setCoachMode(true);
+      } else {
+        throw new Error('Password di squadra corretta, ma PIN Allenatore errato (default: 2026).');
+      }
+    } else {
+      if (isSavedCoachAuth()) {
+        setCoachMode(true);
+      } else {
+        setCoachMode(false);
+      }
+    }
+
     savePassword(password);
 
     els.authScreen.classList.add('hidden');
@@ -1353,6 +1707,24 @@
       els.togglePwBtn.textContent = isPw ? 'Nascondi' : 'Mostra';
     });
 
+    els.roleSwimmerBtn.addEventListener('click', () => {
+      state.authRole = 'swimmer';
+      els.roleSwimmerBtn.classList.add('active');
+      els.roleCoachBtn.classList.remove('active');
+      els.coachPinField.classList.add('hidden');
+      els.coachPinInput.value = '';
+      els.unlockBtn.textContent = 'Accedi ai risultati';
+    });
+
+    els.roleCoachBtn.addEventListener('click', () => {
+      state.authRole = 'coach';
+      els.roleCoachBtn.classList.add('active');
+      els.roleSwimmerBtn.classList.remove('active');
+      els.coachPinField.classList.remove('hidden');
+      els.unlockBtn.textContent = 'Accedi come Allenatore';
+      setTimeout(() => els.coachPinInput.focus(), 50);
+    });
+
     els.authForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const pw = els.passwordInput.value;
@@ -1360,7 +1732,7 @@
       els.unlockBtn.disabled = true;
       els.unlockBtn.textContent = 'Verifica in corso...';
       try {
-        await tryUnlock(pw);
+        await tryUnlock(pw, els.coachPinInput.value);
       } catch (err) {
         showAuthError(err.message || 'Errore durante la verifica della password.');
         if (window.location.protocol === 'file:') {
@@ -1368,15 +1740,109 @@
         }
       } finally {
         els.unlockBtn.disabled = false;
-        els.unlockBtn.textContent = 'Accedi ai risultati';
+        els.unlockBtn.textContent = state.authRole === 'coach' ? 'Accedi come Allenatore' : 'Accedi ai risultati';
       }
+    });
+
+    els.coachModeBtn.addEventListener('click', () => {
+      if (state.isCoach) {
+        const choice = confirm(
+          'Modalità Allenatore attiva.\n\n- Premi OK per ESPORTARE i commenti tecnici in CSV.\n- Premi ANNULLA se desideri disattivare la modalità Coach.'
+        );
+        if (choice) {
+          exportCommentsCsv();
+        } else {
+          setCoachMode(false);
+        }
+      } else {
+        els.coachPinError.classList.add('hidden');
+        els.modalCoachPin.value = '';
+        els.coachPinModal.classList.remove('hidden');
+        setTimeout(() => els.modalCoachPin.focus(), 50);
+      }
+    });
+
+    els.confirmCoachPinBtn.addEventListener('click', () => {
+      const entered = (els.modalCoachPin.value || '').trim();
+      const expected = String(state.activeDataset?.coachPin || '2026').trim();
+      if (entered === expected) {
+        els.coachPinModal.classList.add('hidden');
+        setCoachMode(true);
+      } else {
+        els.coachPinError.textContent = 'PIN non corretto. Riprova.';
+        els.coachPinError.classList.remove('hidden');
+      }
+    });
+
+    els.modalCoachPin.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        els.confirmCoachPinBtn.click();
+      }
+    });
+
+    document.querySelectorAll('.close-modal-btn, [data-close]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const targetId = btn.dataset.close;
+        if (targetId) {
+          document.getElementById(targetId)?.classList.add('hidden');
+        }
+      });
+    });
+
+    if (els.quickTags) {
+      els.quickTags.addEventListener('click', (e) => {
+        const btn = e.target.closest('.quick-tag');
+        if (!btn) return;
+        const tag = btn.dataset.tag;
+        const current = els.commentTextarea.value;
+        const insert = `[${tag}]: `;
+        els.commentTextarea.value = current ? `${current.trim()}\n${insert}` : insert;
+        els.commentTextarea.focus();
+      });
+    }
+
+    els.saveCommentBtn.addEventListener('click', saveCurrentComment);
+    els.deleteCommentBtn.addEventListener('click', deleteCurrentComment);
+
+    els.athleteHistoryPanel.addEventListener('click', (e) => {
+      const editBtn = e.target.closest('.edit-comment-btn');
+      const addBtn = e.target.closest('.add-comment-btn');
+      const btn = editBtn || addBtn;
+      if (!btn) return;
+
+      const athleteId = btn.dataset.athleteId;
+      const date = btn.dataset.date;
+      const event = btn.dataset.event;
+      const time = btn.dataset.time;
+      const meet = btn.dataset.meet;
+      const commentId = btn.dataset.commentId;
+
+      const athlete = (state.activeDataset?.athletes || []).find((a) => a.id === athleteId);
+      const athleteName = athlete ? athlete.name : '';
+
+      const existingComment = commentId
+        ? state.comments.find((c) => c.id === commentId)
+        : findComment(athleteId, athleteName, date, event);
+
+      openCommentModal({
+        athleteId,
+        athleteName,
+        date,
+        event,
+        time,
+        meet,
+        existingComment
+      });
     });
 
     els.logoutBtn.addEventListener('click', () => {
       clearSavedPassword();
+      setCoachMode(false);
       state.realDataset = null;
       state.activeDataset = null;
       els.passwordInput.value = '';
+      els.coachPinInput.value = '';
       els.appShell.classList.add('hidden');
       els.authScreen.classList.remove('hidden');
     });

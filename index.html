@@ -8,10 +8,10 @@
   <link rel="icon" type="image/png" href="Logo%20tondo.png">
   <link rel="apple-touch-icon" href="Logo%20tondo.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css?v=20261115d">
+  <link rel="stylesheet" href="styles.css?v=20261118a">
 </head>
 <body>
-  <!-- SCHERMATA DI ACCESSO CON PASSWORD SQUADRA -->
+  <!-- SCHERMATA DI ACCESSO CON PASSWORD SQUADRA / ALLENATORE -->
   <div id="auth-screen" class="auth-screen">
     <div class="auth-card">
       <div class="auth-header">
@@ -19,6 +19,16 @@
         <h1>Dinamica Sport</h1>
       </div>
       <p class="auth-subtitle">Portale tempi gare, Personal Best e progressi atleti</p>
+
+      <!-- SELETTORE ACCESSO ATLETA/GENITORE vs ALLENATORE -->
+      <div class="auth-role-tabs" role="tablist" aria-label="Tipo di accesso">
+        <button type="button" class="role-tab active" id="role-swimmer-btn" data-role="swimmer">
+          🏊 Atleta / Genitore
+        </button>
+        <button type="button" class="role-tab" id="role-coach-btn" data-role="coach">
+          ⏱️ Allenatore
+        </button>
+      </div>
 
       <form id="auth-form" class="auth-form">
         <label for="team-password">Password di squadra</label>
@@ -33,6 +43,19 @@
           <button type="button" id="toggle-pw-btn" class="icon-btn" aria-label="Mostra o nascondi password">
             Mostra
           </button>
+        </div>
+
+        <!-- PIN COACH AGGIUNTIVO (SOLO SE SELEZIONATO RUOLO ALLENATORE) -->
+        <div id="coach-pin-field" class="coach-pin-field hidden">
+          <label for="coach-pin">PIN Allenatore</label>
+          <input
+            id="coach-pin"
+            type="password"
+            inputmode="numeric"
+            maxlength="8"
+            placeholder="PIN Coach (es. 2026)"
+          >
+          <span class="muted-small">PIN riservato allo staff per inserire commenti tecnici</span>
         </div>
 
         <label class="checkbox-row">
@@ -69,6 +92,9 @@
           </div>
         </div>
         <div class="topbar-actions">
+          <button type="button" id="coach-mode-btn" class="btn btn-outline btn-sm coach-top-btn" title="Passa alla modalità Allenatore">
+            ⏱️ Accesso Coach
+          </button>
           <button type="button" id="logout-btn" class="btn btn-outline btn-sm">
             Esci
           </button>
@@ -283,7 +309,68 @@
     </main>
   </div>
 
-  <script src="app.js?v=20261115d"></script>
+  <!-- MODALE PIN ALLENATORE -->
+  <div id="coach-pin-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="coach-modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="coach-modal-title">⏱️ Modalità Allenatore</h3>
+        <button type="button" class="icon-btn close-modal-btn" data-close="coach-pin-modal" aria-label="Chiudi">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Inserisci il PIN per abilitare l'inserimento e la modifica dei commenti tecnici sulle prestazioni degli atleti.</p>
+        <div class="field-group">
+          <label for="modal-coach-pin">PIN Allenatore</label>
+          <input id="modal-coach-pin" type="password" inputmode="numeric" maxlength="8" placeholder="PIN (es. 2026)">
+        </div>
+        <div id="coach-pin-error" class="alert alert-error hidden"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" data-close="coach-pin-modal">Annulla</button>
+        <button type="button" id="confirm-coach-pin-btn" class="btn btn-primary">Attiva Modalità Coach</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODALE INSERIMENTO / MODIFICA COMMENTO TECNICO -->
+  <div id="comment-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="comment-modal-title">
+    <div class="modal-card modal-card-lg">
+      <div class="modal-header">
+        <h3 id="comment-modal-title">💬 Commento Tecnico Coach</h3>
+        <button type="button" class="icon-btn close-modal-btn" data-close="comment-modal" aria-label="Chiudi">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="comment-race-summary" class="comment-race-summary"></div>
+
+        <div class="field-group" style="margin-top: 12px;">
+          <label for="comment-author">Autore / Allenatore</label>
+          <input id="comment-author" type="text" placeholder="Es. Coach Luca" maxlength="40">
+        </div>
+
+        <div class="field-group" style="margin-top: 12px;">
+          <label for="comment-textarea">Commento Tecnico</label>
+          <div class="quick-tags" id="quick-tags">
+            <span class="quick-tag-label">Inserisci rapido:</span>
+            <button type="button" class="quick-tag" data-tag="Partenza">Partenza</button>
+            <button type="button" class="quick-tag" data-tag="Virata">Virata</button>
+            <button type="button" class="quick-tag" data-tag="Subacquea">Subacquea</button>
+            <button type="button" class="quick-tag" data-tag="Passaggio">Passaggio</button>
+            <button type="button" class="quick-tag" data-tag="Frequenza">Frequenza</button>
+            <button type="button" class="quick-tag" data-tag="Arrivo">Arrivo</button>
+          </div>
+          <textarea id="comment-textarea" rows="4" placeholder="Es. Ottima partenza e subacquea profonda. Curare la frequenza di bracciata nel secondo 25m e l'arrivo alla piastra..."></textarea>
+        </div>
+
+        <div id="comment-modal-status" class="alert hidden"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="delete-comment-btn" class="btn btn-danger hidden">Elimina</button>
+        <button type="button" class="btn btn-ghost" data-close="comment-modal">Annulla</button>
+        <button type="button" id="save-comment-btn" class="btn btn-primary">Salva Commento</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=20261118a"></script>
 </body>
 </html>
 

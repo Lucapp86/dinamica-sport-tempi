@@ -15,9 +15,10 @@
     "Cadetti",
     "Seniores",
     "Assoluti",
-    "Master",
     "Altro"
   ],
-  "defaultPoolLength": "25m"
+  "defaultPoolLength": "25m",
+  "coachPin": "2026",
+  "commentsApiUrl": ""
 }
 

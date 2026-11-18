@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Aggiorna i dati della squadra Dinamica Sport da nuotopiemonte-uisp.it e da eventuali CSV manuali,
     calcola categorie/tempi/PB e genera il file cifrato data/team-data.enc.json per la Web App.
@@ -78,6 +78,18 @@ function Format-TitleCase([string]$Text) {
         else { $w.Substring(0, 1).ToUpperInvariant() + $w.Substring(1).ToLowerInvariant() }
     }
     return ($out -join ' ')
+}
+
+function Get-ObjectProp([object]$Obj, [string]$PropName) {
+    if ($null -eq $Obj) { return $null }
+    if ($Obj -is [System.Collections.IDictionary]) {
+        if ($Obj.Contains($PropName)) { return $Obj[$PropName] }
+        return $null
+    }
+    if ($null -ne $Obj.PSObject -and $null -ne $Obj.PSObject.Properties[$PropName]) {
+        return $Obj.PSObject.Properties[$PropName].Value
+    }
+    return $null
 }
 
 function Parse-ItalianDateToIso([string]$RawDate) {
@@ -755,6 +767,63 @@ function Parse-RosterCsv([string]$CsvText) {
     return $athletes.ToArray()
 }
 
+function Parse-CommentsCsv([string]$CsvText) {
+    $comments = New-Object System.Collections.Generic.List[object]
+    $lines = @($CsvText -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and -not $_.TrimStart().StartsWith('#') })
+    if ($lines.Count -lt 2) { return @() }
+
+    $delim = if (($lines[0] -split ';').Count -ge ($lines[0] -split ',').Count) { ';' } else { ',' }
+    $rows = ($lines -join "`n") | ConvertFrom-Csv -Delimiter $delim
+    foreach ($r in $rows) {
+        $props = @{}
+        foreach ($p in $r.PSObject.Properties) {
+            $props[(Normalize-Key $p.Name)] = if ($null -ne $p.Value) { ([string]$p.Value).Trim() } else { "" }
+        }
+
+        $athlete = ""
+        foreach ($k in @("atleta", "nome", "nominativo", "nuotatore")) {
+            if ($props.ContainsKey($k) -and $props[$k]) { $athlete = $props[$k]; break }
+        }
+
+        $date = ""
+        foreach ($k in @("data", "data gara")) {
+            if ($props.ContainsKey($k) -and $props[$k]) { $date = Parse-ItalianDateToIso $props[$k]; break }
+        }
+
+        $event = ""
+        foreach ($k in @("gara", "evento", "distanza")) {
+            if ($props.ContainsKey($k) -and $props[$k]) { $event = Normalize-EventName $props[$k]; break }
+        }
+
+        $text = ""
+        foreach ($k in @("commento", "nota", "note", "commento tecnico", "feedback", "testo")) {
+            if ($props.ContainsKey($k) -and $props[$k]) { $text = $props[$k]; break }
+        }
+
+        $author = "Coach"
+        foreach ($k in @("allenatore", "coach", "autore")) {
+            if ($props.ContainsKey($k) -and $props[$k]) { $author = $props[$k]; break }
+        }
+
+        if (-not $athlete -or -not $text) { continue }
+
+        $id = if ($props.ContainsKey("id") -and $props["id"]) { $props["id"] } else { "c_" + [guid]::NewGuid().ToString("N").Substring(0, 12) }
+        $updatedAt = if ($props.ContainsKey("updatedat") -and $props["updatedat"]) { $props["updatedat"] } else { (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssK") }
+
+        [void]$comments.Add([pscustomobject]@{
+            id = $id
+            athleteRaw = $athlete
+            athleteName = Format-TitleCase $athlete
+            date = $date
+            event = $event
+            text = $text
+            author = $author
+            updatedAt = $updatedAt
+        })
+    }
+    return $comments.ToArray()
+}
+
 function Build-Dataset(
     [object[]]$OfficialResults,
     [object[]]$ManualResults,
@@ -763,7 +832,8 @@ function Build-Dataset(
     [object]$Config,
     [object[]]$StartlistRelays = @(),
     [object[]]$RosterAthletes = @(),
-    [object[]]$ClubRankings = @()
+    [object[]]$ClubRankings = @(),
+    [object[]]$Comments = @()
 ) {
     $allResults = New-Object System.Collections.Generic.List[object]
     $seenResultKeys = New-Object System.Collections.Generic.HashSet[string]
@@ -963,6 +1033,55 @@ function Build-Dataset(
         }
     }
 
+    $normalizedComments = New-Object System.Collections.Generic.List[object]
+    $seenCommentKeys = New-Object System.Collections.Generic.HashSet[string]
+    foreach ($c in @($Comments)) {
+        if ($null -eq $c) { continue }
+        $aid = [string](Get-ObjectProp $c "athleteId")
+        if (-not $aid) {
+            $raw = [string](Get-ObjectProp $c "athleteRaw")
+            if (-not $raw) { $raw = [string](Get-ObjectProp $c "athleteName") }
+            $nameNorm = (Normalize-Key $raw) -replace '\s+', ''
+            if ($athleteIdByNormName.ContainsKey($nameNorm)) {
+                $aid = $athleteIdByNormName[$nameNorm]
+            }
+        }
+
+        $cDate = [string](Get-ObjectProp $c "date")
+        $rawEvent = [string](Get-ObjectProp $c "event")
+        $cEvent = if ($rawEvent) { Normalize-EventName $rawEvent } else { "" }
+        $cText = ([string](Get-ObjectProp $c "text")).Trim()
+        if (-not $cText) { continue }
+
+        $cKey = "{0}|{1}|{2}|{3}" -f $aid, $cDate, (Normalize-Key $cEvent), (Normalize-Key $cText)
+        if (-not $seenCommentKeys.Add($cKey)) { continue }
+
+        $rawId = [string](Get-ObjectProp $c "id")
+        $cId = if ($rawId) { $rawId } else { "c_" + [guid]::NewGuid().ToString("N").Substring(0, 12) }
+        $rawAuthor = [string](Get-ObjectProp $c "author")
+        $cAuthor = if ($rawAuthor) { $rawAuthor } else { "Coach" }
+        $rawUpdated = [string](Get-ObjectProp $c "updatedAt")
+        $cUpdated = if ($rawUpdated) { $rawUpdated } else { (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssK") }
+        $aName = [string](Get-ObjectProp $c "athleteName")
+        if (-not $aName -and $aid -and $athletesByKey.ContainsKey($aid)) {
+            $aName = $athletesByKey[$aid].name
+        }
+
+        [void]$normalizedComments.Add([ordered]@{
+            id = $cId
+            athleteId = $aid
+            athleteName = $aName
+            date = $cDate
+            event = $cEvent
+            text = $cText
+            author = $cAuthor
+            updatedAt = $cUpdated
+        })
+    }
+
+    $coachPin = if ($null -ne $Config.PSObject.Properties["coachPin"] -and $Config.coachPin) { [string]$Config.coachPin } else { "2026" }
+    $commentsApiUrl = if ($null -ne $Config.PSObject.Properties["commentsApiUrl"] -and $Config.commentsApiUrl) { [string]$Config.commentsApiUrl } else { "" }
+
     return [ordered]@{
         clubName = $Config.clubName
         sourceBaseUrl = $Config.sourceBaseUrl
@@ -974,6 +1093,9 @@ function Build-Dataset(
         relays = $sortedRelays
         relayEntries = $sortedRelayEntries
         clubRankings = [object[]]$sortedClubRankings.ToArray()
+        comments = [object[]]$normalizedComments.ToArray()
+        coachPin = $coachPin
+        commentsApiUrl = $commentsApiUrl
     }
 }
 
@@ -1107,6 +1229,7 @@ function Decrypt-DatasetJson([object]$Envelope, [string]$Passphrase) {
 function Get-DatasetFingerprint([object]$Dataset) {
     $relayEntries = if ($null -ne $Dataset.PSObject.Properties["relayEntries"]) { $Dataset.relayEntries } else { @() }
     $clubRankings = if ($null -ne $Dataset.PSObject.Properties["clubRankings"]) { $Dataset.clubRankings } else { @() }
+    $comments = if ($null -ne $Dataset.PSObject.Properties["comments"]) { $Dataset.comments } else { @() }
     $core = [ordered]@{
         clubName = $Dataset.clubName
         athletes = $Dataset.athletes
@@ -1115,6 +1238,7 @@ function Get-DatasetFingerprint([object]$Dataset) {
         relays = $Dataset.relays
         relayEntries = $relayEntries
         clubRankings = $clubRankings
+        comments = $comments
     }
     return ($core | ConvertTo-Json -Depth 10 -Compress)
 }
@@ -1131,6 +1255,7 @@ if ($MyInvocation.InvocationName -ne '.') {
     $startlistRelays = New-Object System.Collections.Generic.List[object]
     $manualResults = New-Object System.Collections.Generic.List[object]
     $clubRankings = New-Object System.Collections.Generic.List[object]
+    $commentsList = New-Object System.Collections.Generic.List[object]
 
     if (-not $SkipRemote) {
         Write-Host "Scarico indice manifestazioni da $baseUrl..."
@@ -1256,12 +1381,55 @@ if ($MyInvocation.InvocationName -ne '.') {
                     }
                 }
             }
+            if ($null -ne $existingPlainDataset.PSObject.Properties["comments"]) {
+                foreach ($ec in @($existingPlainDataset.comments)) {
+                    if ($null -ne $ec) {
+                        [void]$commentsList.Add($ec)
+                    }
+                }
+            }
         } catch {
             $existingPlainDataset = $null
         }
     }
 
-    # 3c) Anagrafica tesserati da export.csv / roster.csv / atleti.csv
+    # 3c) Commenti tecnici da file CSV locali (data/commenti.csv, ecc.)
+    $commentCandidates = @(
+        (Join-Path $dataDir "commenti.csv"),
+        (Join-Path $dataDir "comments.csv"),
+        (Join-Path $rootDir "commenti.csv")
+    ) + @(Get-ChildItem -Path $dataDir -Filter "*comment*.csv" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+
+    foreach ($cf in ($commentCandidates | Select-Object -Unique)) {
+        if ($cf -and (Test-Path $cf)) {
+            Write-Host "Carico commenti tecnici da $cf..."
+            $cText = Read-Utf8File $cf
+            foreach ($c in @(Parse-CommentsCsv $cText)) {
+                [void]$commentsList.Add($c)
+            }
+        }
+    }
+
+    $commentsUrl = if ($null -ne $config.PSObject.Properties["commentsApiUrl"] -and $config.commentsApiUrl) { $config.commentsApiUrl } else { $env:COMMENTS_CSV_URL }
+    if ($commentsUrl) {
+        try {
+            Write-Host "Verifico commenti remoti da $commentsUrl..."
+            $remCommentsCsv = Fetch-UrlUtf8 $commentsUrl
+            if ($remCommentsCsv -and $remCommentsCsv.Length -gt 10) {
+                if ($remCommentsCsv.TrimStart().StartsWith('{') -or $remCommentsCsv.TrimStart().StartsWith('[')) {
+                    $jsonParsed = $remCommentsCsv | ConvertFrom-Json
+                    $rawItems = if ($jsonParsed.comments) { $jsonParsed.comments } else { $jsonParsed }
+                    foreach ($jc in @($rawItems)) { [void]$commentsList.Add($jc) }
+                } else {
+                    foreach ($c in @(Parse-CommentsCsv $remCommentsCsv)) { [void]$commentsList.Add($c) }
+                }
+            }
+        } catch {
+            Write-Warning "Impossibile leggere commenti remoti: $($_.Exception.Message)"
+        }
+    }
+
+    # 3d) Anagrafica tesserati da export.csv / roster.csv / atleti.csv
     $rosterAthletes = New-Object System.Collections.Generic.List[object]
     $rosterCandidates = @(
         (Join-Path $dataDir "export.csv"),
@@ -1294,7 +1462,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         }
     }
 
-    $dataset = Build-Dataset $officialResults.ToArray() $manualResults.ToArray() $startlistEntries.ToArray() $relays.ToArray() $config $startlistRelays.ToArray() $rosterAthletes.ToArray() $clubRankings.ToArray()
+    $dataset = Build-Dataset $officialResults.ToArray() $manualResults.ToArray() $startlistEntries.ToArray() $relays.ToArray() $config $startlistRelays.ToArray() $rosterAthletes.ToArray() $clubRankings.ToArray() $commentsList.ToArray()
     $datasetJson = $dataset | ConvertTo-Json -Depth 10 -Compress
 
     if ($PlaintextTestOutput) {
@@ -1309,11 +1477,11 @@ if ($MyInvocation.InvocationName -ne '.') {
     }
 
     if ($skipWrite) {
-        Write-Host ("Nessuna modifica rispetto ai dati gia salvati (Atleti: {0} | Risultati: {1} | Iscrizioni: {2} | Classifiche società: {3})." -f $dataset.athletes.Count, $dataset.results.Count, $dataset.entries.Count, $dataset.clubRankings.Count)
+        Write-Host ("Nessuna modifica rispetto ai dati gia salvati (Atleti: {0} | Risultati: {1} | Iscrizioni: {2} | Commenti: {3} | Classifiche società: {4})." -f $dataset.athletes.Count, $dataset.results.Count, $dataset.entries.Count, $dataset.comments.Count, $dataset.clubRankings.Count)
     } else {
         $encryptedEnvelope = Encrypt-DatasetJson $datasetJson $Password
         $envelopeJson = $encryptedEnvelope | ConvertTo-Json -Depth 5
         Write-Utf8File $OutputPath $envelopeJson
-        Write-Host ("Completato! Atleti: {0} | Risultati: {1} | Staffette: {2} | Iscrizioni: {3} | Staffette startlist: {4} | Classifiche società: {5} -> {6}" -f $dataset.athletes.Count, $dataset.results.Count, $dataset.relays.Count, $dataset.entries.Count, $dataset.relayEntries.Count, $dataset.clubRankings.Count, $OutputPath)
+        Write-Host ("Completato! Atleti: {0} | Risultati: {1} | Staffette: {2} | Iscrizioni: {3} | Staffette startlist: {4} | Commenti: {5} | Classifiche società: {6} -> {7}" -f $dataset.athletes.Count, $dataset.results.Count, $dataset.relays.Count, $dataset.entries.Count, $dataset.relayEntries.Count, $dataset.comments.Count, $dataset.clubRankings.Count, $OutputPath)
     }
 }
