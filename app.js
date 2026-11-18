@@ -6,6 +6,8 @@
   const COACH_STORAGE_KEY = 'dinamica_coach_auth_v1';
   const COMMENTS_STORAGE_KEY = 'dinamica_coach_comments_v1';
   const COACH_AUTHOR_KEY = 'dinamica_coach_author_v1';
+  const DEFAULT_COMMENTS_API_URL =
+    'https://script.google.com/macros/s/AKfycbx0kT52raw_Y1jRcYSnlWW9wGjI_TC71QRAcnWcKy-NdXE_77IJOagUSjPZcLxC7ixPNg/exec';
 
   const STROKE_ORDER = ['stile libero', 'dorso', 'rana', 'farfalla', 'misti', 'mista'];
 
@@ -420,7 +422,7 @@
   }
 
   async function syncCommentToApi(commentObj, action = 'save') {
-    const apiUrl = state.activeDataset?.commentsApiUrl || '';
+    const apiUrl = state.activeDataset?.commentsApiUrl || DEFAULT_COMMENTS_API_URL;
     if (!apiUrl) return;
 
     try {
@@ -436,7 +438,7 @@
   }
 
   async function fetchRemoteComments() {
-    const apiUrl = state.activeDataset?.commentsApiUrl || '';
+    const apiUrl = state.activeDataset?.commentsApiUrl || DEFAULT_COMMENTS_API_URL;
     if (!apiUrl) return;
 
     try {

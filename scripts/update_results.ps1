@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Aggiorna i dati della squadra Dinamica Sport da nuotopiemonte-uisp.it e da eventuali CSV manuali,
     calcola categorie/tempi/PB e genera il file cifrato data/team-data.enc.json per la Web App.
