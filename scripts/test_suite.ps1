@@ -236,7 +236,9 @@ Assert-Equal "Commento 1 Atleta" $parsedComments[0].athleteName "Piana Ginevra"
 Assert-Equal "Commento 1 Testo" $parsedComments[0].text "Ottima virata e ritmo alto nei primi 25m."
 Assert-Equal "Commento 1 Autore" $parsedComments[0].author "Coach Luca"
 
-$dsWithComments = Build-Dataset @($parsed.Records[0]) $manualParsed @() @() $cfg @() @() @() $parsedComments
+$cfgTest = $cfg.PSObject.Copy()
+if (-not $cfgTest.coachPin) { $cfgTest.coachPin = "0286" }
+$dsWithComments = Build-Dataset @($parsed.Records[0]) $manualParsed @() @() $cfgTest @() @() @() $parsedComments
 Assert-Equal "Dataset con commenti count" $dsWithComments.comments.Count 2
 Assert-Equal "Dataset commento 1 atleta" $dsWithComments.comments[0].athleteName "Piana Ginevra"
 Assert-Equal "Dataset commento 2 atleta" $dsWithComments.comments[1].athleteName "Borzillo Gregorio"

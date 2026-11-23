@@ -1246,6 +1246,17 @@ function Get-DatasetFingerprint([object]$Dataset) {
 # === ESECUZIONE PRINCIPALE ===
 if ($MyInvocation.InvocationName -ne '.') {
     $config = Read-Utf8File $ConfigPath | ConvertFrom-Json
+    $localConfigPath = Join-Path $rootDir "config.local.json"
+    if (Test-Path $localConfigPath) {
+        try {
+            $localConfig = Read-Utf8File $localConfigPath | ConvertFrom-Json
+            foreach ($p in $localConfig.PSObject.Properties) {
+                if ($null -ne $p.Value -and $p.Value -ne "") {
+                    $config.($p.Name) = $p.Value
+                }
+            }
+        } catch {}
+    }
     $baseUrl = $config.sourceBaseUrl.TrimEnd('/')
     $clubRegex = $config.clubMatchRegex
 
